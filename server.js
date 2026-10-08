@@ -38,6 +38,7 @@ function revokeUser(id){for(const [key,session] of sessions) if(session.userId==
 setupRecurring(db);
 syncRecurring(db);
 setInterval(()=>{try{syncRecurring(db);}catch(e){console.error('Charges périodiques :',e.message);}},60*1000).unref();
+db.exec('CREATE TABLE IF NOT EXISTS payment_attachments(id INTEGER PRIMARY KEY,name TEXT NOT NULL,mime TEXT NOT NULL,content BLOB NOT NULL)');
 const backupDir = process.env.BACKUP_DIR || path.join(path.dirname(databasePath), 'backups');
 let backingUp = false;
 async function dailyBackup() {
@@ -110,8 +111,15 @@ const server=http.createServer(async(req,res)=>{
  }
  if(url.pathname.startsWith('/api/')){
  res.setHeader('Content-Type','application/json');
- if(req.method==='GET' && url.pathname==='/api/state'){syncRecurring(db);return res.end(JSON.stringify(Object.fromEntries([...kinds.map(k=>[k,list(k)]),['recurringCharges',db.prepare('SELECT * FROM recurring_charges ORDER BY id').all().map(x=>({id:x.id,label:x.label,category:x.category,amount:x.amount_cents/100,active:!!x.active,startMonth:x.start_month,lastMonth:x.last_month}))],['currentUser',publicUser(currentUser)],['users',currentUser.role==='admin'?db.prepare('SELECT id,username,name,role,active FROM users ORDER BY id').all().map(publicUser):[]],['settings',JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data || '{}')]])));}
- let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>1000000)throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');
+ if(req.method==='GET' && /^\/api\/attachments\/\d+$/.test(url.pathname)){
+ const attachment=db.prepare('SELECT * FROM payment_attachments WHERE id=?').get(Number(url.pathname.split('/')[3]));
+ if(!attachment){res.writeHead(404);return res.end('{}');}
+ res.setHeader('Content-Type',attachment.mime);
+ res.setHeader('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(attachment.name));
+ return res.end(Buffer.from(attachment.content));
+ }
+ if(req.method==='GET' && url.pathname==='/api/state'){syncRecurring(db);return res.end(JSON.stringify(Object.fromEntries([...kinds.map(k=>[k,list(k)]),['recurringCharges',db.prepare('SELECT * FROM recurring_charges ORDER BY id').all().map(x=>({id:x.id,label:x.label,category:x.category,amount:x.amount_cents/100,active:!!x.active,startMonth:x.start_month,lastMonth:x.last_month,supplierId:x.supplier_id||null,supplierName: list('suppliers').find(s=>s.id===x.supplier_id)?.name||''}))],['currentUser',publicUser(currentUser)],['users',currentUser.role==='admin'?db.prepare('SELECT id,username,name,role,active FROM users ORDER BY id').all().map(publicUser):[]],['settings',JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data || '{}')]])));}
+ let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>(url.pathname==='/api/expensePayments'?7500000:1000000))throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');
  if(url.pathname==='/api/users' && req.method==='POST') {
  if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}
  const existing=body.id?db.prepare('SELECT * FROM users WHERE id=?').get(Number(body.id)):null;
@@ -138,8 +146,10 @@ const server=http.createServer(async(req,res)=>{
  const existing=body.id?db.prepare('SELECT * FROM recurring_charges WHERE id=?').get(body.id):null;
  if(body.id&&!existing)throw Error('Charge périodique introuvable');
  if(!existing&&body.startMonth<new Date().toISOString().slice(0,7))throw Error('Choisissez le mois actuel ou un mois futur');
- if(existing)db.prepare('UPDATE recurring_charges SET label=?,category=?,amount_cents=?,active=?,start_month=? WHERE id=?').run(body.label.trim(),body.category.trim(),Math.round(body.amount*100),Number(body.active),body.startMonth,body.id);
- else db.prepare('INSERT INTO recurring_charges(label,category,amount_cents,active,start_month) VALUES(?,?,?,?,?)').run(body.label.trim(),body.category.trim(),Math.round(body.amount*100),Number(body.active),body.startMonth);
+ const supplier=body.supplierId?list('suppliers').find(x=>x.id===body.supplierId):null;
+ if(body.supplierId&&!supplier)throw Error('Fournisseur introuvable');
+ if(existing)db.prepare('UPDATE recurring_charges SET label=?,category=?,amount_cents=?,active=?,start_month=?,supplier_id=? WHERE id=?').run(body.label.trim(),body.category.trim(),Math.round(body.amount*100),Number(body.active),body.startMonth,supplier?.id||null,body.id);
+ else db.prepare('INSERT INTO recurring_charges(label,category,amount_cents,active,start_month,supplier_id) VALUES(?,?,?,?,?,?)').run(body.label.trim(),body.category.trim(),Math.round(body.amount*100),Number(body.active),body.startMonth,supplier?.id||null);
  syncRecurring(db);return res.end('{}');
  }
  const kind=url.pathname.split('/')[2];if(kind==='settings'){if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(body));return res.end('{}');}
@@ -158,12 +168,29 @@ const server=http.createServer(async(req,res)=>{
  const id=save(kind,{label:body.label.trim(),category:body.category.trim(),amount:amountCents/100,amountCents,date:body.date,supplierId:supplier?.id||null,supplierName:supplier?.name||'',reference:String(body.reference||''),notes:String(body.notes||''),createdBy:currentUser.name,createdAt:new Date().toISOString()});
  return res.end(JSON.stringify({id}));
  }
- if(body.id!==undefined||!['Espèces','Virement','Chèque','Carte','Autre'].includes(body.method))throw Error('Paiement invalide');
+ if(body.id!==undefined||!['Espèces','Virement','App banque','Chèque','Carte','Autre'].includes(body.method))throw Error('Paiement invalide');
+ let attachment=null;
+ if(body.attachment){
+ const file=body.attachment;
+ if(typeof file.name!=='string'||!file.name.trim()||file.name.length>200||typeof file.base64!=='string'||! /^[A-Za-z0-9+/]*={0,2}$/.test(file.base64))throw Error('Pièce jointe invalide');
+ const bytes=Buffer.from(file.base64,'base64');
+ if(!bytes.length||bytes.length>5*1024*1024||bytes.toString('base64')!==file.base64)throw Error('Pièce jointe : maximum 5 Mo');
+ const isPdf=bytes.subarray(0,5).toString()==='%PDF-';
+ const isPng=bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
+ const isJpeg=bytes[0]===255&&bytes[1]===216&&bytes[2]===255;
+ if(!((file.mime==='application/pdf'&&isPdf)||(file.mime==='image/png'&&isPng)||(file.mime==='image/jpeg'&&isJpeg)))throw Error('Formats acceptés : PDF, PNG et JPEG');
+ attachment={name:file.name.replace(/[\/\\\r\n]/g,'_'),mime:file.mime,bytes};
+ }
  db.exec('BEGIN IMMEDIATE');try {
  const expense=list('expenses').find(x=>x.id===body.expenseId);if(!expense)throw Error('Charge introuvable');
  const paid=list('expensePayments').filter(p=>p.expenseId===expense.id).reduce((sum,p)=>sum+p.amountCents,0);
  if(amountCents>expense.amountCents-paid)throw Error('Le paiement dépasse le reste à payer');
- const id=save(kind,{expenseId:expense.id,label:expense.label,amount:amountCents/100,amountCents,date:body.date,method:body.method,reference:String(body.reference||''),notes:String(body.notes||''),createdBy:currentUser.name,createdAt:new Date().toISOString()});
+ const supplierId=body.supplierId||expense.supplierId;
+ const supplier=supplierId?list('suppliers').find(x=>x.id===supplierId):null;
+ if(body.supplierId&&!supplier)throw Error('Fournisseur introuvable');
+ let attachmentInfo=null;
+ if(attachment){const attachmentId=Number(db.prepare('INSERT INTO payment_attachments(name,mime,content) VALUES(?,?,?)').run(attachment.name,attachment.mime,attachment.bytes).lastInsertRowid);attachmentInfo={id:attachmentId,name:attachment.name};}
+ const id=save(kind,{supplierId:supplier?.id||expense.supplierId||null,supplierName:supplier?.name||expense.supplierName||'',attachment:attachmentInfo,expenseId:expense.id,label:expense.label,amount:amountCents/100,amountCents,date:body.date,method:body.method,reference:String(body.reference||''),notes:String(body.notes||''),createdBy:currentUser.name,createdAt:new Date().toISOString()});
  db.exec('COMMIT');return res.end(JSON.stringify({id}));
  }catch(error){db.exec('ROLLBACK');throw error;}
  }

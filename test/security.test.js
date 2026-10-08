@@ -8,7 +8,7 @@ test('authentification, origine et sauvegarde SQLite',async()=>{
  const url='http://127.0.0.1:3101';
  const unauthenticated=await fetch(url,{redirect:'manual'});assert.equal(unauthenticated.status,303);assert.equal(unauthenticated.headers.get('location'),'/login');assert.equal(unauthenticated.headers.get('www-authenticate'),null);
  assert.match(await(await fetch(url+'/login')).text(),/login-form/);assert.equal((await fetch(url+'/login.js')).status,200);
- assert.equal((await fetch(url+'/api/state')).status,401);
+ assert.equal((await fetch(url+'/api/state')).status,401);assert.equal((await fetch(url+'/api/attachments/1')).status,401);
  const login=credentials=>fetch(url+'/api/login',{method:'POST',headers:{'Content-Type':'application/json',Origin:url},body:JSON.stringify(credentials)});
  assert.equal((await login({username:'admin',password:'wrong'})).status,401);
  const response=await login({username:'admin',password});assert.equal(response.status,200);

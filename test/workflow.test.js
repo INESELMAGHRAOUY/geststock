@@ -25,7 +25,10 @@ test('devis, facture, stock insuffisant, réception et persistance',async()=>{
  assert.equal((await request('suppliers',{...updated})).status,400);
  const expenseBody={label:'Loyer',category:'Local',amount:1000,date:'2026-10-08',supplierId:supplier,reference:'LOY-1'};
  const expense=(await request('expenses',expenseBody)).data.id;assert.ok(expense);
- const payment={expenseId:expense,amount:300,date:'2026-10-08',method:'Virement',reference:'VIR-1'};
+ const pdf=Buffer.from('%PDF-1.4\nJustificatif test');
+ const payment={expenseId:expense,amount:300,date:'2026-10-08',method:'App banque',reference:'VIR-1',supplierId:supplier,attachment:{name:'preuve.pdf',mime:'application/pdf',base64:pdf.toString('base64')}};
+ assert.equal((await request('expensePayments',{...payment,attachment:{name:'bad.pdf',mime:'application/pdf',base64:Buffer.from('not a pdf').toString('base64')}})).status,400);
+ assert.equal((await request('expensePayments',{...payment,supplierId:99999})).status,400);
  assert.equal((await request('expensePayments',payment)).status,200);
  assert.equal((await request('expensePayments',{...payment,amount:701})).status,400);
  assert.equal((await request('expensePayments',{...payment,amount:700})).status,200);
@@ -35,10 +38,12 @@ test('devis, facture, stock insuffisant, réception et persistance',async()=>{
  assert.equal((await request('expenses',{...expenseBody,amount:1.234})).status,400);
  assert.equal((await request('expensePayments',{...payment,expenseId:99999})).status,400);
  s=(await request('state')).data;assert.equal(s.expenses.length,5);assert.equal(s.expensePayments.length,2);assert.equal(s.expensePayments.reduce((sum,p)=>sum+p.amountCents,0),100000);
+ const paidRecord=(await request('state')).data.expensePayments.find(x=>x.amount===300);assert.equal(paidRecord.method,'App banque');assert.equal(paidRecord.supplierId,supplier);assert.equal(paidRecord.supplierName,'Fournisseur modifié');assert.ok(paidRecord.attachment.id);
+ const downloaded=await fetch('http://127.0.0.1:3099/api/attachments/'+paidRecord.attachment.id);assert.equal(downloaded.status,200);assert.match(downloaded.headers.get('content-disposition'),/attachment/);assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()),pdf);
  const periodic=(await request('state')).data.recurringCharges.find(x=>x.label==='WIFI');
- assert.equal((await request('recurringCharges',{...periodic,amount:199,active:false})).status,200);
- let changed=(await request('state')).data.recurringCharges.find(x=>x.id===periodic.id);assert.equal(changed.amount,199);assert.equal(changed.active,false);
+ assert.equal((await request('recurringCharges',{...periodic,amount:199,active:false,supplierId:supplier})).status,200);
+ let changed=(await request('state')).data.recurringCharges.find(x=>x.id===periodic.id);assert.equal(changed.amount,199);assert.equal(changed.active,false);assert.equal(changed.supplierId,supplier);
  assert.equal((await request('recurringCharges',{...changed,amount:0})).status,400);
- await new Promise(resolve=>{child.once('exit',resolve);child.kill();});await start();assert.equal((await request('state')).data.products[0].stock,8);assert.equal((await request('state')).data.clients[0].name,'Client modifié');assert.equal((await request('state')).data.expensePayments.length,2);assert.equal((await request('state')).data.recurringCharges.find(x=>x.label==='WIFI').active,false);
+ await new Promise(resolve=>{child.once('exit',resolve);child.kill();});await start();assert.equal((await request('state')).data.products[0].stock,8);assert.equal((await request('state')).data.clients[0].name,'Client modifié');assert.equal((await request('state')).data.expensePayments.length,2);assert.equal((await request('state')).data.recurringCharges.find(x=>x.label==='WIFI').active,false);assert.equal((await fetch('http://127.0.0.1:3099/api/attachments/'+paidRecord.attachment.id)).status,200);
  }finally{if(child&&!child.killed)await new Promise(resolve=>{child.once('exit',resolve);child.kill();});fs.rmSync(dir,{recursive:true,force:true});}
 });
