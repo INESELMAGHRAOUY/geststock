@@ -8,7 +8,7 @@ Application web de gestion commerciale, en français. Node.js >= 22.13, sans dé
 npm start
 ```
 
-Avant le démarrage, définir `ADMIN_USER` et `ADMIN_PASSWORD` (16 caractères minimum) dans les variables d’environnement. Le navigateur affiche une fenêtre d’authentification HTTP Basic ; toutes les pages et API sont protégées. Utiliser HTTPS en ligne. Pour sortir, fermer toutes les fenêtres du navigateur ou utiliser une fenêtre privée et la fermer ensuite.
+Avant le démarrage, définir `ADMIN_USER` et `ADMIN_PASSWORD` (16 caractères minimum) dans les variables d’environnement. La page /login propose un formulaire de connexion. Toutes les données et pages de gestion nécessitent une session, conservée dans un cookie HttpOnly et SameSite=Strict (Secure sur hébergement). Les sessions expirent après 8 heures et sont invalidées lors d’un redémarrage ou via le bouton Déconnexion. Utiliser HTTPS en ligne.
 
 Pour le développement local uniquement, `ALLOW_LOCAL_NO_AUTH=1` permet de démarrer sans identifiants si `HOST` est absent ou égal à `127.0.0.1`. Ne jamais définir ce contournement sur un hébergement.
 
@@ -20,7 +20,7 @@ La base locale est `data/stock.db` (ignorée par Git). Sauvegarder cette base r�
 
 ## Limites de la première version
 
-Un seul compte administrateur ; pas encore de rôles ni gestion multi-utilisateurs. Authentification HTTP Basic, HTTPS requis sur un hébergement. La limitation des tentatives repose sur l’adresse du pair réseau ; derrière un proxy, cette limite peut être partagée. Pas encore de paiements, avoirs, retours, comptabilité ou garantie de conformité fiscale. Ajuster le modèle de chèque au formulaire bancaire avant utilisation ; le montant en lettres est saisi manuellement. L’impression utilise la boîte de dialogue du navigateur et nécessite une imprimante compatible.
+Un seul compte administrateur ; pas encore de rôles ni gestion multi-utilisateurs. Authentification par session, HTTPS requis sur un hébergement. La limitation des tentatives repose sur l’adresse du pair réseau ; derrière un proxy, cette limite peut être partagée. Pas encore de paiements, avoirs, retours, comptabilité ou garantie de conformité fiscale. Ajuster le modèle de chèque au formulaire bancaire avant utilisation ; le montant en lettres est saisi manuellement. L’impression utilise la boîte de dialogue du navigateur et nécessite une imprimante compatible.
 
 ## Hostinger et sauvegardes
 

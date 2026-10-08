@@ -13,6 +13,8 @@ if (!localOnly && (!username || !password || password.length < 16)) {
 const digest = value => crypto.createHash('sha256').update(value).digest();
 const expected = digest(`${username}:${password}`);
 const failures = new Map();
+const sessions = new Map();
+const sessionLifetime = 8*60*60*1000;
 fs.mkdirSync(path.join(__dirname,'data'),{recursive:true});
 const databasePath = path.resolve(process.env.DB_PATH || path.join(__dirname,'data/stock.db'));
 const db = new DatabaseSync(databasePath);
@@ -50,22 +52,41 @@ const server=http.createServer(async(req,res)=>{
  res.setHeader('X-Content-Type-Options','nosniff');
  res.setHeader('X-Frame-Options','DENY');
  res.setHeader('Referrer-Policy','same-origin');
- if (!localOnly) {
- const address = req.socket.remoteAddress;
- const now = Date.now();
- for (const [key,value] of failures) if(now-value.start>60000) failures.delete(key);
- if ((failures.get(address)?.count || 0)>=20) {res.writeHead(429,{'Retry-After':'60'});return res.end('Trop de tentatives. Réessayez dans une minute.');}
- const header=req.headers.authorization||'';
- const supplied=header.startsWith('Basic ')?Buffer.from(header.slice(6),'base64').toString():'';
- if (!crypto.timingSafeEqual(digest(supplied),expected)) {
- if(header) {const entry=failures.get(address)||{start:now,count:0};entry.count++;failures.set(address,entry);}
- res.writeHead(401,{'WWW-Authenticate':'Basic realm="GestStock", charset="UTF-8"'});return res.end('Connexion requise');
- }
- }
+ const url=new URL(req.url,'http://localhost');
  if (!['GET','HEAD'].includes(req.method) && (req.headers['sec-fetch-site']==='cross-site' || (req.headers.origin && new URL(req.headers.origin).host!==req.headers.host))) {
  res.writeHead(403);return res.end('Origine non autorisée');
  }
- const url=new URL(req.url,'http://localhost');
+ const cookieName = localOnly || process.env.HOST==='127.0.0.1' ? 'geststock_session' : '__Host-geststock_session';
+ const cookieOptions = `; HttpOnly; SameSite=Strict; Path=/${cookieName.startsWith('__Host-')?'; Secure':''}`;
+ const token=(req.headers.cookie||'').split(';').map(c=>c.trim()).find(c=>c.startsWith(cookieName+'='))?.slice(cookieName.length+1);
+ const now=Date.now();
+ for(const [key,expires] of sessions) if(expires<=now) sessions.delete(key);
+ if(url.pathname==='/api/login' && req.method==='POST') {
+ const address=req.socket.remoteAddress;
+ for(const [key,value] of failures) if(now-value.start>60000) failures.delete(key);
+ if((failures.get(address)?.count||0)>=20) {res.writeHead(429,{'Content-Type':'application/json','Retry-After':'60'});return res.end(JSON.stringify({error:'Trop de tentatives. Réessayez dans une minute.'}));}
+ let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)throw Error('Requête trop volumineuse');}
+ const credentials=JSON.parse(raw||'{}');
+ if(!crypto.timingSafeEqual(digest(`${credentials.username}:${credentials.password}`),expected)) {
+ const entry=failures.get(address)||{start:now,count:0};entry.count++;failures.set(address,entry);
+ res.writeHead(401,{'Content-Type':'application/json'});return res.end(JSON.stringify({error:'Identifiants incorrects.'}));
+ }
+ const session=crypto.randomBytes(32).toString('hex');sessions.set(session,now+sessionLifetime);
+ res.setHeader('Set-Cookie',`${cookieName}=${session}; Max-Age=${sessionLifetime/1000}${cookieOptions}`);
+ res.setHeader('Content-Type','application/json');return res.end('{}');
+ }
+ if(url.pathname==='/api/logout' && req.method==='POST') {
+ sessions.delete(token);res.setHeader('Set-Cookie',`${cookieName}=; Max-Age=0${cookieOptions}`);res.setHeader('Content-Type','application/json');return res.end('{}');
+ }
+ if(url.pathname==='/login' && req.method==='GET') {
+ if(localOnly || sessions.has(token)){res.writeHead(303,{Location:'/'});return res.end();}
+ res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(fs.readFileSync(path.join(__dirname,'public/login.html')));
+ }
+ const loginAsset=['/login.js','/style.css'].includes(url.pathname) && req.method==='GET';
+ if(!localOnly && !sessions.has(token) && !loginAsset) {
+ if(url.pathname.startsWith('/api/')){res.writeHead(401,{'Content-Type':'application/json'});return res.end(JSON.stringify({error:'Session expirée. Veuillez vous reconnecter.'}));}
+ res.writeHead(303,{Location:'/login'});return res.end();
+ }
  if(url.pathname.startsWith('/api/')){
  res.setHeader('Content-Type','application/json');
  if(req.method==='GET' && url.pathname==='/api/state'){return res.end(JSON.stringify(Object.fromEntries([...kinds.map(k=>[k,list(k)]),['settings',JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data || '{}')]])));}
@@ -94,7 +115,7 @@ const server=http.createServer(async(req,res)=>{
  if(kind==='cheques'&&(!body.beneficiary?.trim()||!Number.isFinite(body.amount)||body.amount<=0))throw Error('Chèque invalide');
  return res.end(JSON.stringify({id:save(kind,body,body.id)}));
  }
- const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css'].includes(file)){res.writeHead(404);return res.end();}
+ const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js'].includes(file)){res.writeHead(404);return res.end();}
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(path.join(__dirname,'public',file)));
  }catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}
 });

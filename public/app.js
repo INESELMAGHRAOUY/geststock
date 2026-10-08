@@ -2,8 +2,9 @@ let state={},page='dashboard',lines=[];
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>Number(n||0).toFixed(2)+' '+esc(state.settings.currency||'MAD');
 const menus={dashboard:'Vue d’ensemble',products:'Produits & stock',clients:'Clients',suppliers:'Fournisseurs',documents:'Factures & devis',cheques:'Chèques',settings:'Paramètres'};
-async function api(kind,body,method='POST'){const r=await fetch('/api/'+kind,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw Error(data.error);return data;}
-async function load(){state=await(await fetch('/api/state')).json();render();}
+async function api(kind,body,method='POST'){const r=await fetch('/api/'+kind,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await r.json();if(r.status===401){location.replace('/login');throw Error(data.error);}if(!r.ok)throw Error(data.error);return data;}
+async function load(){const response=await fetch('/api/state');if(response.status===401){location.replace('/login');return;}if(!response.ok)throw Error('Chargement impossible');state=await response.json();render();}
+document.querySelector('#logout').addEventListener('click',async()=>{try{await api('logout',{});location.replace('/login');}catch(err){$('#notice').textContent=err.message;}});
 const field=(name,label,type='text',value='')=>`<label>${label}<input name="${name}" type="${type}" value="${esc(value)}" ${type==='number'?'min="0" step="0.01"':''}></label>`;
 const options=(kind,label)=>`<option value="">${label}</option>`+state[kind].map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');
 const table=(heads,rows)=>rows.length?`<table><thead><tr>${heads.map(x=>`<th>${x}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(x=>`<td>${x}</td>`).join('')}</tr>`).join('')}</tbody></table>`:'<div class="empty">Aucune donnée. Ajoutez votre premier élément.</div>';
