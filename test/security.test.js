@@ -28,6 +28,7 @@ test('authentification, origine et sauvegarde SQLite',async()=>{
  const staffAuth={Cookie:loginEmployee.headers.get('set-cookie').split(';')[0]};
  assert.equal((await changeUser(staffAuth,{...employee,username:'another'})).status,403);
  assert.equal((await fetch(url+'/api/settings',{method:'POST',headers:{...staffAuth,Origin:url},body:'{}'})).status,403);
+ assert.equal((await fetch(url+'/api/banks',{method:'POST',headers:{...staffAuth,Origin:url},body:JSON.stringify({name:'Banque',active:true})})).status,403);
  assert.equal((await fetch(url+'/api/products',{method:'POST',headers:{...staffAuth,Origin:url},body:JSON.stringify({name:'Staff article',price:10,stock:2,min:1})})).status,200);
  state=await(await fetch(url+'/api/state',{headers:staffAuth})).json();assert.deepEqual(state.users,[]);
  const admin= (await(await fetch(url+'/api/state',{headers:auth})).json()).users.find(u=>u.role==='admin');

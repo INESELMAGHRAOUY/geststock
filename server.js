@@ -62,8 +62,14 @@ async function dailyBackup() {
 initialization.then(dailyBackup).catch(()=>{});
 setInterval(dailyBackup,60*60*1000).unref();
 const list = kind => db.prepare('SELECT id,data FROM records WHERE kind=? ORDER BY id DESC').all(kind).map(r=>({ ...JSON.parse(r.data),id:r.id}));
-const kinds = ['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments'];
+const kinds = ['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments','banks'];
 function save(kind,data,id){if(id) db.prepare('UPDATE records SET data=? WHERE id=? AND kind=?').run(JSON.stringify(data),id,kind);else id=Number(db.prepare('INSERT INTO records(kind,data) VALUES(?,?)').run(kind,JSON.stringify(data)).lastInsertRowid);return id;}
+if(!db.prepare("SELECT value FROM app_metadata WHERE key='banks-defaults-v1'").get()){
+ db.exec('BEGIN IMMEDIATE');try{
+ for(const name of ['CDM','ATTIJARIWAFA BANK','BMCE'])save('banks',{name,account:'',rib:'',agency:'',active:true});
+ db.prepare('INSERT INTO app_metadata VALUES(?,?)').run('banks-defaults-v1','1');db.exec('COMMIT');
+ }catch(e){db.exec('ROLLBACK');throw e;}
+}
 const server=http.createServer(async(req,res)=>{
  try {
  res.setHeader('Cache-Control','no-store');
@@ -154,6 +160,14 @@ const server=http.createServer(async(req,res)=>{
  }
  const kind=url.pathname.split('/')[2];if(kind==='settings'){if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(body));return res.end('{}');}
  if(!kinds.includes(kind))throw Error('Module inconnu');
+ if(kind==='banks'){
+ if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}
+ if(req.method!=='POST')throw Error('Désactivez la banque pour conserver son historique');
+ if(typeof body.name!=='string'||!body.name.trim()||typeof body.active!=='boolean')throw Error('Nom et état de la banque obligatoires');
+ if(body.id!==undefined&&(!Number.isSafeInteger(body.id)||!list('banks').some(b=>b.id===body.id)))throw Error('Banque introuvable');
+ for(const key of ['account','rib','agency'])if(body[key]!==undefined&&typeof body[key]!=='string')throw Error('Informations bancaires invalides');
+ const id=save('banks',{name:body.name.trim(),account:body.account||'',rib:body.rib||'',agency:body.agency||'',active:body.active},body.id);return res.end(JSON.stringify({id}));
+ }
  if(['expenses','expensePayments'].includes(kind)) {
  if(req.method!=='POST')throw Error('Les charges et paiements sont conservés dans l’historique');
  const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
@@ -169,6 +183,9 @@ const server=http.createServer(async(req,res)=>{
  return res.end(JSON.stringify({id}));
  }
  if(body.id!==undefined||!['Espèces','Virement','App banque','Chèque','Carte','Autre'].includes(body.method))throw Error('Paiement invalide');
+ const bank=body.bankId?list('banks').find(b=>b.id===body.bankId&&b.active):null;
+ if(body.bankId&&!bank)throw Error('Banque introuvable ou désactivée');
+ if(body.method==='Chèque'&&(!bank||typeof body.chequeNumber!=='string'||!body.chequeNumber.trim()||!validDate(body.chequeDueDate)))throw Error('Pour un chèque : banque, numéro et date d’échéance obligatoires');
  let attachment=null;
  if(body.attachment){
  const file=body.attachment;
@@ -190,7 +207,7 @@ const server=http.createServer(async(req,res)=>{
  if(body.supplierId&&!supplier)throw Error('Fournisseur introuvable');
  let attachmentInfo=null;
  if(attachment){const attachmentId=Number(db.prepare('INSERT INTO payment_attachments(name,mime,content) VALUES(?,?,?)').run(attachment.name,attachment.mime,attachment.bytes).lastInsertRowid);attachmentInfo={id:attachmentId,name:attachment.name};}
- const id=save(kind,{supplierId:supplier?.id||expense.supplierId||null,supplierName:supplier?.name||expense.supplierName||'',attachment:attachmentInfo,expenseId:expense.id,label:expense.label,amount:amountCents/100,amountCents,date:body.date,method:body.method,reference:String(body.reference||''),notes:String(body.notes||''),createdBy:currentUser.name,createdAt:new Date().toISOString()});
+ const id=save(kind,{bankId:bank?.id||null,bankName:bank?.name||'',bankAccount:bank?.account||'',chequeNumber:body.method==='Chèque'?body.chequeNumber.trim():'',chequeDueDate:body.method==='Chèque'?body.chequeDueDate:'',supplierId:supplier?.id||expense.supplierId||null,supplierName:supplier?.name||expense.supplierName||'',attachment:attachmentInfo,expenseId:expense.id,label:expense.label,amount:amountCents/100,amountCents,date:body.date,method:body.method,reference:String(body.reference||''),notes:String(body.notes||''),createdBy:currentUser.name,createdAt:new Date().toISOString()});
  db.exec('COMMIT');return res.end(JSON.stringify({id}));
  }catch(error){db.exec('ROLLBACK');throw error;}
  }

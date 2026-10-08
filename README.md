@@ -53,3 +53,9 @@ Le serveur vérifie les échéances chaque minute, au démarrage et au chargemen
 Les charges périodiques peuvent être associées à un fournisseur ; il est repris sur les prochaines échéances. Le paiement propose le fournisseur de la charge et permet de choisir un autre fournisseur. Le mode App banque sert à enregistrer un paiement effectué via une application bancaire, sans connexion bancaire automatique.
 
 Un justificatif facultatif par paiement peut être ajouté : PDF, PNG ou JPEG, maximum 5 Mo. Le serveur vérifie le format et la taille, conserve le contenu dans SQLite et propose un téléchargement authentifié depuis l’historique. Les nouvelles sauvegardes de la base incluent ces fichiers. Ils sont servis en téléchargement et ne sont pas exposés dans un dossier public. Les historiques antérieurs et les anciennes charges déjà générées restent inchangés.
+
+## Banques et chèques des paiements
+
+Le menu Banques, réservé aux administrateurs, permet d’ajouter, modifier et activer/désactiver les banques et comptes (titulaire, RIB et agence facultatifs). CDM, ATTIJARIWAFA BANK et BMCE sont initialisées une seule fois ; les modifications sont conservées. Les banques actives sont proposées à tous les utilisateurs dans les paiements.
+
+Pour le mode Chèque, banque, numéro du chèque et date d’échéance sont obligatoires. La date du paiement reste distincte de cette échéance. L’historique conserve une copie du nom de la banque et du compte lors de la saisie. Le montant est comptabilisé comme paiement enregistré dès la saisie ; l’échéance ne déclenche ni encaissement automatique, ni vérification bancaire. Il n’y a pas encore de rapprochement bancaire ou de suivi des chèques encaissés/rejetés.

@@ -40,10 +40,22 @@ test('devis, facture, stock insuffisant, réception et persistance',async()=>{
  s=(await request('state')).data;assert.equal(s.expenses.length,5);assert.equal(s.expensePayments.length,2);assert.equal(s.expensePayments.reduce((sum,p)=>sum+p.amountCents,0),100000);
  const paidRecord=(await request('state')).data.expensePayments.find(x=>x.amount===300);assert.equal(paidRecord.method,'App banque');assert.equal(paidRecord.supplierId,supplier);assert.equal(paidRecord.supplierName,'Fournisseur modifié');assert.ok(paidRecord.attachment.id);
  const downloaded=await fetch('http://127.0.0.1:3099/api/attachments/'+paidRecord.attachment.id);assert.equal(downloaded.status,200);assert.match(downloaded.headers.get('content-disposition'),/attachment/);assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()),pdf);
+ const bank=(await request('state')).data.banks.find(x=>x.name==='CDM');assert.ok(bank);assert.equal((await request('state')).data.banks.length,3);
+ const chequeExpense=(await request('expenses',{...expenseBody,label:'Charge par chèque',amount:200})).data.id;
+ const chequePayment={expenseId:chequeExpense,amount:200,date:'2026-10-08',method:'Chèque',bankId:bank.id,chequeNumber:'CH-123',chequeDueDate:'2026-11-01'};
+ assert.equal((await request('expensePayments',{...chequePayment,bankId:0})).status,400);
+ assert.equal((await request('expensePayments',{...chequePayment,chequeDueDate:'2026-02-30'})).status,400);
+ assert.equal((await request('expensePayments',{...chequePayment,chequeNumber:''})).status,400);
+ assert.equal((await request('banks',{...bank,active:false})).status,200);
+ assert.equal((await request('expensePayments',chequePayment)).status,400);
+ assert.equal((await request('banks',{...bank,active:true,account:'Compte principal'})).status,200);
+ assert.equal((await request('expensePayments',chequePayment)).status,200);
+ assert.equal((await request('banks',{...bank,name:'CDM modifiée',active:true})).status,200);
+ const recorded=(await request('state')).data.expensePayments.find(x=>x.expenseId===chequeExpense);assert.equal(recorded.bankName,'CDM');assert.equal(recorded.bankAccount,'Compte principal');assert.equal(recorded.chequeNumber,'CH-123');assert.equal(recorded.chequeDueDate,'2026-11-01');
  const periodic=(await request('state')).data.recurringCharges.find(x=>x.label==='WIFI');
  assert.equal((await request('recurringCharges',{...periodic,amount:199,active:false,supplierId:supplier})).status,200);
  let changed=(await request('state')).data.recurringCharges.find(x=>x.id===periodic.id);assert.equal(changed.amount,199);assert.equal(changed.active,false);assert.equal(changed.supplierId,supplier);
  assert.equal((await request('recurringCharges',{...changed,amount:0})).status,400);
- await new Promise(resolve=>{child.once('exit',resolve);child.kill();});await start();assert.equal((await request('state')).data.products[0].stock,8);assert.equal((await request('state')).data.clients[0].name,'Client modifié');assert.equal((await request('state')).data.expensePayments.length,2);assert.equal((await request('state')).data.recurringCharges.find(x=>x.label==='WIFI').active,false);assert.equal((await fetch('http://127.0.0.1:3099/api/attachments/'+paidRecord.attachment.id)).status,200);
+ await new Promise(resolve=>{child.once('exit',resolve);child.kill();});await start();assert.equal((await request('state')).data.products[0].stock,8);assert.equal((await request('state')).data.clients[0].name,'Client modifié');assert.equal((await request('state')).data.expensePayments.length,3);assert.equal((await request('state')).data.recurringCharges.find(x=>x.label==='WIFI').active,false);assert.equal((await fetch('http://127.0.0.1:3099/api/attachments/'+paidRecord.attachment.id)).status,200);
  }finally{if(child&&!child.killed)await new Promise(resolve=>{child.once('exit',resolve);child.kill();});fs.rmSync(dir,{recursive:true,force:true});}
 });
