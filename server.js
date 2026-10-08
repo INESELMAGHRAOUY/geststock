@@ -136,7 +136,12 @@ const server=http.createServer(async(req,res)=>{
  db.prepare('DELETE FROM records WHERE id=? AND kind=?').run(id,kind);return res.end('{}');}
  if(req.method!=='POST')throw Error('Méthode non autorisée');
  if(kind==='products'){if(!body.name?.trim()||![body.price,body.stock,body.min].every(x=>Number.isFinite(x)&&x>=0))throw Error('Produit invalide');}
- if(['clients','suppliers'].includes(kind)&&!body.name?.trim())throw Error('Nom obligatoire');
+ if(['clients','suppliers'].includes(kind)){
+ if(typeof body.name!=='string'||!body.name.trim())throw Error('Nom obligatoire');
+ if(body.id!==undefined&&(!Number.isSafeInteger(body.id)||!db.prepare('SELECT id FROM records WHERE id=? AND kind=?').get(body.id,kind)))throw Error('Contact introuvable');
+ for(const key of ['phone','email','address','ice'])if(body[key]!==undefined&&typeof body[key]!=='string')throw Error('Informations de contact invalides');
+ body.name=body.name.trim();
+ }
  if(kind==='documents'){
  if(!['Facture','Devis'].includes(body.type)||!body.lines?.length)throw Error('Document invalide');
  db.exec('BEGIN IMMEDIATE');try{

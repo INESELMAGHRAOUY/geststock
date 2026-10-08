@@ -9,6 +9,14 @@ test('devis, facture, stock insuffisant, réception et persistance',async()=>{
  assert.equal((await request('documents',{...doc,type:'Facture',lines:[{productId:p,qty:2},{productId:p,qty:2}]})).status,400);s=(await request('state')).data;assert.equal(s.products[0].stock,3);assert.equal(s.documents.length,2);
  assert.equal((await request('movements',{productId:p,qty:4,reference:'REC-1'})).status,200);assert.equal((await request('state')).data.products[0].stock,7);
  assert.equal((await request('cheques',{beneficiary:'Fournisseur',amount:120,words:'Cent vingt dirhams'})).status,200);
- await new Promise(resolve=>{child.once('exit',resolve);child.kill();});await start();assert.equal((await request('state')).data.products[0].stock,7);
+ const updated={id:c,name:'Client modifié',phone:'0600000000',email:'client@example.com',address:'Rabat',ice:'123'};
+ assert.equal((await request('clients',updated)).status,200);
+ s=(await request('state')).data;assert.equal(s.clients.length,1);assert.equal(s.clients[0].phone,updated.phone);assert.equal(s.clients[0].id,c);assert.equal(s.documents[0].clientName,'Client test');
+ assert.equal((await request('clients',{...updated,name:''})).status,400);
+ assert.equal((await request('clients',{...updated,id:99999})).status,400);
+ const supplier=(await request('suppliers',{name:'Fournisseur'})).data.id;
+ assert.equal((await request('suppliers',{id:supplier,name:'Fournisseur modifié',address:'Casa'})).status,200);
+ assert.equal((await request('suppliers',{...updated})).status,400);
+ await new Promise(resolve=>{child.once('exit',resolve);child.kill();});await start();assert.equal((await request('state')).data.products[0].stock,7);assert.equal((await request('state')).data.clients[0].name,'Client modifié');
  }finally{if(child&&!child.killed)await new Promise(resolve=>{child.once('exit',resolve);child.kill();});fs.rmSync(dir,{recursive:true,force:true});}
 });
