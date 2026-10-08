@@ -57,7 +57,7 @@ async function dailyBackup() {
 initialization.then(dailyBackup).catch(()=>{});
 setInterval(dailyBackup,60*60*1000).unref();
 const list = kind => db.prepare('SELECT id,data FROM records WHERE kind=? ORDER BY id DESC').all(kind).map(r=>({ ...JSON.parse(r.data),id:r.id}));
-const kinds = ['products','clients','suppliers','documents','cheques','movements'];
+const kinds = ['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments'];
 function save(kind,data,id){if(id) db.prepare('UPDATE records SET data=? WHERE id=? AND kind=?').run(JSON.stringify(data),id,kind);else id=Number(db.prepare('INSERT INTO records(kind,data) VALUES(?,?)').run(kind,JSON.stringify(data)).lastInsertRowid);return id;}
 const server=http.createServer(async(req,res)=>{
  try {
@@ -129,6 +129,29 @@ const server=http.createServer(async(req,res)=>{
  }
  const kind=url.pathname.split('/')[2];if(kind==='settings'){if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(body));return res.end('{}');}
  if(!kinds.includes(kind))throw Error('Module inconnu');
+ if(['expenses','expensePayments'].includes(kind)) {
+ if(req.method!=='POST')throw Error('Les charges et paiements sont conservés dans l’historique');
+ const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
+ const cents=value=>{if(!Number.isFinite(value)||value<=0||!Number.isSafeInteger(Math.round(value*100))||Math.abs(value*100-Math.round(value*100))>0.00001)throw Error('Montant positif avec deux décimales maximum');return Math.round(value*100);};
+ const amountCents=cents(body.amount);
+ if(!validDate(body.date))throw Error('Date invalide');
+ if(kind==='expenses') {
+ if(typeof body.label!=='string'||!body.label.trim()||typeof body.category!=='string'||!body.category.trim())throw Error('Libellé et catégorie obligatoires');
+ if(body.id!==undefined)throw Error('Une charge enregistrée ne peut pas être remplacée');
+ const supplier=body.supplierId?list('suppliers').find(x=>x.id===body.supplierId):null;
+ if(body.supplierId&&!supplier)throw Error('Fournisseur introuvable');
+ const id=save(kind,{label:body.label.trim(),category:body.category.trim(),amount:amountCents/100,amountCents,date:body.date,supplierId:supplier?.id||null,supplierName:supplier?.name||'',reference:String(body.reference||''),notes:String(body.notes||''),createdBy:currentUser.name,createdAt:new Date().toISOString()});
+ return res.end(JSON.stringify({id}));
+ }
+ if(body.id!==undefined||!['Espèces','Virement','Chèque','Carte','Autre'].includes(body.method))throw Error('Paiement invalide');
+ db.exec('BEGIN IMMEDIATE');try {
+ const expense=list('expenses').find(x=>x.id===body.expenseId);if(!expense)throw Error('Charge introuvable');
+ const paid=list('expensePayments').filter(p=>p.expenseId===expense.id).reduce((sum,p)=>sum+p.amountCents,0);
+ if(amountCents>expense.amountCents-paid)throw Error('Le paiement dépasse le reste à payer');
+ const id=save(kind,{expenseId:expense.id,label:expense.label,amount:amountCents/100,amountCents,date:body.date,method:body.method,reference:String(body.reference||''),notes:String(body.notes||''),createdBy:currentUser.name,createdAt:new Date().toISOString()});
+ db.exec('COMMIT');return res.end(JSON.stringify({id}));
+ }catch(error){db.exec('ROLLBACK');throw error;}
+ }
  if(req.method==='DELETE'){
  const id=Number(url.pathname.split('/')[3]);const item=list(kind).find(x=>x.id===id);
  if(kind==='documents'&&item?.type==='Facture')throw Error('Une facture validée ne peut pas être supprimée');
@@ -164,7 +187,7 @@ const server=http.createServer(async(req,res)=>{
  if(kind==='cheques'&&(!body.beneficiary?.trim()||!Number.isFinite(body.amount)||body.amount<=0))throw Error('Chèque invalide');
  return res.end(JSON.stringify({id:save(kind,body,body.id)}));
  }
- const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js'].includes(file)){res.writeHead(404);return res.end();}
+ const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','charges.js'].includes(file)){res.writeHead(404);return res.end();}
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(path.join(__dirname,'public',file)));
  }catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}
 });

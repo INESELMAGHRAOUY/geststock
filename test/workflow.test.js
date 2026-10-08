@@ -23,6 +23,18 @@ test('devis, facture, stock insuffisant, réception et persistance',async()=>{
  const supplier=(await request('suppliers',{name:'Fournisseur'})).data.id;
  assert.equal((await request('suppliers',{id:supplier,name:'Fournisseur modifié',address:'Casa'})).status,200);
  assert.equal((await request('suppliers',{...updated})).status,400);
- await new Promise(resolve=>{child.once('exit',resolve);child.kill();});await start();assert.equal((await request('state')).data.products[0].stock,8);assert.equal((await request('state')).data.clients[0].name,'Client modifié');
+ const expenseBody={label:'Loyer',category:'Local',amount:1000,date:'2026-10-08',supplierId:supplier,reference:'LOY-1'};
+ const expense=(await request('expenses',expenseBody)).data.id;assert.ok(expense);
+ const payment={expenseId:expense,amount:300,date:'2026-10-08',method:'Virement',reference:'VIR-1'};
+ assert.equal((await request('expensePayments',payment)).status,200);
+ assert.equal((await request('expensePayments',{...payment,amount:701})).status,400);
+ assert.equal((await request('expensePayments',{...payment,amount:700})).status,200);
+ assert.equal((await request('expensePayments',{...payment,amount:0.01})).status,400);
+ assert.equal((await request('expenses',{...expenseBody,amount:-1})).status,400);
+ assert.equal((await request('expenses',{...expenseBody,date:'2026-02-30'})).status,400);
+ assert.equal((await request('expenses',{...expenseBody,amount:1.234})).status,400);
+ assert.equal((await request('expensePayments',{...payment,expenseId:99999})).status,400);
+ s=(await request('state')).data;assert.equal(s.expenses.length,1);assert.equal(s.expensePayments.length,2);assert.equal(s.expensePayments.reduce((sum,p)=>sum+p.amountCents,0),100000);
+ await new Promise(resolve=>{child.once('exit',resolve);child.kill();});await start();assert.equal((await request('state')).data.products[0].stock,8);assert.equal((await request('state')).data.clients[0].name,'Client modifié');assert.equal((await request('state')).data.expensePayments.length,2);
  }finally{if(child&&!child.killed)await new Promise(resolve=>{child.once('exit',resolve);child.kill();});fs.rmSync(dir,{recursive:true,force:true});}
 });
