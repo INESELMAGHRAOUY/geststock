@@ -168,6 +168,21 @@ const server=http.createServer(async(req,res)=>{
  for(const key of ['account','rib','agency'])if(body[key]!==undefined&&typeof body[key]!=='string')throw Error('Informations bancaires invalides');
  const id=save('banks',{name:body.name.trim(),account:body.account||'',rib:body.rib||'',agency:body.agency||'',active:body.active},body.id);return res.end(JSON.stringify({id}));
  }
+ if(kind==='expensePayments' && body.id!==undefined){
+ if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Modification et validation réservées aux administrateurs.'}));}
+ const existing=Number.isSafeInteger(body.id)?list(kind).find(x=>x.id===body.id):null;
+ if(!existing)throw Error('Paiement introuvable');
+ if(body.expectedUpdatedAt!==(existing.updatedAt||existing.createdAt))throw Error('Le paiement a changé. Rechargez la page.');
+ if(body.action==='validate'){
+ if(existing.method!=='Chèque'||existing.status==='validated')throw Error('Ce chèque ne peut pas être validé');
+ const value=body.clearedDate;
+ if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value)||Number.isNaN(Date.parse(value))||new Date(value).toISOString().slice(0,10)!==value||value>new Date().toISOString().slice(0,10))throw Error('Date d’encaissement invalide');
+ const updated={...existing,status:'validated',clearedDate:value,validatedBy:currentUser.name,updatedAt:new Date().toISOString(),updatedBy:currentUser.name};
+ updated.history=[...(existing.history||[]),{action:'Encaissement validé',by:currentUser.name,at:updated.updatedAt,previous:{...existing,history:undefined}}];
+ save(kind,updated,existing.id);return res.end('{}');
+ }
+ if(body.action==='attachment')Object.assign(body,{...existing,attachment:body.attachment,action:'attachment',expectedUpdatedAt:body.expectedUpdatedAt});
+ }
  if(['expenses','expensePayments'].includes(kind)) {
  if(req.method!=='POST')throw Error('Les charges et paiements sont conservés dans l’historique');
  const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
@@ -182,8 +197,9 @@ const server=http.createServer(async(req,res)=>{
  const id=save(kind,{label:body.label.trim(),category:body.category.trim(),amount:amountCents/100,amountCents,date:body.date,supplierId:supplier?.id||null,supplierName:supplier?.name||'',reference:String(body.reference||''),notes:String(body.notes||''),createdBy:currentUser.name,createdAt:new Date().toISOString()});
  return res.end(JSON.stringify({id}));
  }
- if(body.id!==undefined||!['Espèces','Virement','App banque','Chèque','Carte','Autre'].includes(body.method))throw Error('Paiement invalide');
- const bank=body.bankId?list('banks').find(b=>b.id===body.bankId&&b.active):null;
+ if(!['Espèces','Virement','App banque','Chèque','Carte','Autre'].includes(body.method))throw Error('Paiement invalide');
+ const previous=body.id?list('expensePayments').find(p=>p.id===body.id):null;
+ const bank=body.bankId?list('banks').find(b=>b.id===body.bankId&&(b.active||previous?.bankId===b.id)):null;
  if(body.bankId&&!bank)throw Error('Banque introuvable ou désactivée');
  if(body.method==='Chèque'&&(!bank||typeof body.chequeNumber!=='string'||!body.chequeNumber.trim()||!validDate(body.chequeDueDate)))throw Error('Pour un chèque : banque, numéro et date d’échéance obligatoires');
  let attachment=null;
@@ -200,14 +216,20 @@ const server=http.createServer(async(req,res)=>{
  }
  db.exec('BEGIN IMMEDIATE');try {
  const expense=list('expenses').find(x=>x.id===body.expenseId);if(!expense)throw Error('Charge introuvable');
- const paid=list('expensePayments').filter(p=>p.expenseId===expense.id).reduce((sum,p)=>sum+p.amountCents,0);
+ const paid=list('expensePayments').filter(p=>p.expenseId===expense.id&&p.id!==body.id).reduce((sum,p)=>sum+p.amountCents,0);
  if(amountCents>expense.amountCents-paid)throw Error('Le paiement dépasse le reste à payer');
  const supplierId=body.supplierId||expense.supplierId;
  const supplier=supplierId?list('suppliers').find(x=>x.id===supplierId):null;
  if(body.supplierId&&!supplier)throw Error('Fournisseur introuvable');
- let attachmentInfo=null;
+ let attachmentInfo=previous?.attachment||null;
  if(attachment){const attachmentId=Number(db.prepare('INSERT INTO payment_attachments(name,mime,content) VALUES(?,?,?)').run(attachment.name,attachment.mime,attachment.bytes).lastInsertRowid);attachmentInfo={id:attachmentId,name:attachment.name};}
- const id=save(kind,{bankId:bank?.id||null,bankName:bank?.name||'',bankAccount:bank?.account||'',chequeNumber:body.method==='Chèque'?body.chequeNumber.trim():'',chequeDueDate:body.method==='Chèque'?body.chequeDueDate:'',supplierId:supplier?.id||expense.supplierId||null,supplierName:supplier?.name||expense.supplierName||'',attachment:attachmentInfo,expenseId:expense.id,label:expense.label,amount:amountCents/100,amountCents,date:body.date,method:body.method,reference:String(body.reference||''),notes:String(body.notes||''),createdBy:currentUser.name,createdAt:new Date().toISOString()});
+ const updated={bankId:bank?.id||null,bankName:bank?.name||'',bankAccount:bank?.account||'',chequeNumber:body.method==='Chèque'?body.chequeNumber.trim():'',chequeDueDate:body.method==='Chèque'?body.chequeDueDate:'',supplierId:supplier?.id||expense.supplierId||null,supplierName:supplier?.name||expense.supplierName||'',attachment:attachmentInfo,expenseId:expense.id,label:expense.label,amount:amountCents/100,amountCents,date:body.date,method:body.method,reference:String(body.reference||''),notes:String(body.notes||''),createdBy:previous?.createdBy||currentUser.name,createdAt:previous?.createdAt||new Date().toISOString()};
+ const financialChanged=previous&&(previous.amountCents!==amountCents||previous.method!==body.method||previous.bankId!==updated.bankId||previous.chequeNumber!==updated.chequeNumber||previous.chequeDueDate!==updated.chequeDueDate);
+ updated.status=body.method==='Chèque'?(!financialChanged&&previous?.status==='validated'?'validated':'pending'):'validated';
+ updated.clearedDate=updated.status==='validated'&&body.method==='Chèque'?previous?.clearedDate||'':'';
+ updated.updatedAt=new Date().toISOString();updated.updatedBy=currentUser.name;
+ updated.history=previous?[...(previous.history||[]),{action:body.action==='attachment'?'Justificatif joint':'Paiement modifié',at:updated.updatedAt,by:currentUser.name,previous:{...previous,history:undefined}}]:[];
+ const id=save(kind,updated,body.id);
  db.exec('COMMIT');return res.end(JSON.stringify({id}));
  }catch(error){db.exec('ROLLBACK');throw error;}
  }
