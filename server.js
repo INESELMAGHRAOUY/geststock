@@ -135,7 +135,15 @@ const server=http.createServer(async(req,res)=>{
  if(kind==='products'&&list('documents').some(d=>d.lines.some(l=>l.productId===id)))throw Error('Produit utilisé dans un document');
  db.prepare('DELETE FROM records WHERE id=? AND kind=?').run(id,kind);return res.end('{}');}
  if(req.method!=='POST')throw Error('Méthode non autorisée');
- if(kind==='products'){if(!body.name?.trim()||![body.price,body.stock,body.min].every(x=>Number.isFinite(x)&&x>=0))throw Error('Produit invalide');}
+ if(kind==='products'){
+ if(typeof body.name!=='string'||!body.name.trim()||![body.price,body.stock,body.min].every(x=>Number.isFinite(x)&&x>=0))throw Error('Produit invalide');
+ if(body.id!==undefined){
+ const existing=Number.isSafeInteger(body.id)?list('products').find(p=>p.id===body.id):null;
+ if(!existing)throw Error('Produit introuvable');
+ if(body.expectedStock!==existing.stock)throw Error('Le stock a changé. Rouvrez le produit avant de modifier.');
+ }
+ delete body.expectedStock;body.name=body.name.trim();
+ }
  if(['clients','suppliers'].includes(kind)){
  if(typeof body.name!=='string'||!body.name.trim())throw Error('Nom obligatoire');
  if(body.id!==undefined&&(!Number.isSafeInteger(body.id)||!db.prepare('SELECT id FROM records WHERE id=? AND kind=?').get(body.id,kind)))throw Error('Contact introuvable');
