@@ -6,12 +6,15 @@ const crypto = require('node:crypto');
 const username = process.env.ADMIN_USER;
 const password = process.env.ADMIN_PASSWORD;
 const localOnly = process.env.ALLOW_LOCAL_NO_AUTH === '1' && (!process.env.HOST || process.env.HOST === '127.0.0.1');
-if (!localOnly && (!username || !password || password.length < 16)) {
- console.error('Configurer ADMIN_USER et ADMIN_PASSWORD (16 caractères minimum).');
- process.exit(1);
+const scrypt = require('node:util').promisify(crypto.scrypt);
+async function hashPassword(value,salt=crypto.randomBytes(16).toString('hex')) {
+ return salt+':'+(await scrypt(value,salt,64)).toString('hex');
 }
-const digest = value => crypto.createHash('sha256').update(value).digest();
-const expected = digest(`${username}:${password}`);
+async function verifyPassword(value,stored) {
+ const [salt,hash]=stored.split(':');
+ const candidate=await scrypt(value,salt,64);
+ return crypto.timingSafeEqual(candidate,Buffer.from(hash,'hex'));
+}
 const failures = new Map();
 const sessions = new Map();
 const sessionLifetime = 8*60*60*1000;
@@ -20,7 +23,17 @@ const databasePath = path.resolve(process.env.DB_PATH || path.join(__dirname,'da
 const db = new DatabaseSync(databasePath);
 db.exec(`PRAGMA foreign_keys=ON;
 CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,data TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY CHECK(id=1),data TEXT NOT NULL);`);
+CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY CHECK(id=1),data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, username TEXT NOT NULL COLLATE NOCASE UNIQUE, name TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','user')), active INTEGER NOT NULL DEFAULT 1);`);
+const initialization=(async()=>{
+ if(!localOnly && !db.prepare('SELECT id FROM users LIMIT 1').get()) {
+ if(!username || !password || password.length<16) throw Error('Configurer ADMIN_USER et ADMIN_PASSWORD (16 caractères minimum).');
+ const hash=await hashPassword(password);
+ db.prepare('INSERT INTO users(username,name,password_hash,role) VALUES(?,?,?,?)').run(username.trim(),username.trim(),hash,'admin');
+ }
+})();
+const publicUser=user=>({id:user.id,username:user.username,name:user.name,role:user.role,active:!!user.active});
+function revokeUser(id){for(const [key,session] of sessions) if(session.userId===id)sessions.delete(key);}
 const backupDir = process.env.BACKUP_DIR || path.join(path.dirname(databasePath), 'backups');
 let backingUp = false;
 async function dailyBackup() {
@@ -41,7 +54,7 @@ async function dailyBackup() {
  } catch (error) { console.error('Sauvegarde échouée :',error.message); }
  finally { backingUp = false; }
 }
-dailyBackup();
+initialization.then(dailyBackup).catch(()=>{});
 setInterval(dailyBackup,60*60*1000).unref();
 const list = kind => db.prepare('SELECT id,data FROM records WHERE kind=? ORDER BY id DESC').all(kind).map(r=>({ ...JSON.parse(r.data),id:r.id}));
 const kinds = ['products','clients','suppliers','documents','cheques','movements'];
@@ -60,24 +73,28 @@ const server=http.createServer(async(req,res)=>{
  const cookieOptions = `; HttpOnly; SameSite=Strict; Path=/${cookieName.startsWith('__Host-')?'; Secure':''}`;
  const token=(req.headers.cookie||'').split(';').map(c=>c.trim()).find(c=>c.startsWith(cookieName+'='))?.slice(cookieName.length+1);
  const now=Date.now();
- for(const [key,expires] of sessions) if(expires<=now) sessions.delete(key);
+ for(const [key,session] of sessions) if(session.expires<=now) sessions.delete(key);
  if(url.pathname==='/api/login' && req.method==='POST') {
  const address=req.socket.remoteAddress;
  for(const [key,value] of failures) if(now-value.start>60000) failures.delete(key);
  if((failures.get(address)?.count||0)>=20) {res.writeHead(429,{'Content-Type':'application/json','Retry-After':'60'});return res.end(JSON.stringify({error:'Trop de tentatives. Réessayez dans une minute.'}));}
  let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>4096)throw Error('Requête trop volumineuse');}
  const credentials=JSON.parse(raw||'{}');
- if(!crypto.timingSafeEqual(digest(`${credentials.username}:${credentials.password}`),expected)) {
+ const user=db.prepare('SELECT * FROM users WHERE username=?').get(typeof credentials.username==='string'?credentials.username.trim():'');
+ const valid=await verifyPassword(typeof credentials.password==='string'?credentials.password:'',user?.password_hash||('00000000000000000000000000000000:'+ '0'.repeat(128)));
+ if(!user || !user.active || !valid) {
  const entry=failures.get(address)||{start:now,count:0};entry.count++;failures.set(address,entry);
  res.writeHead(401,{'Content-Type':'application/json'});return res.end(JSON.stringify({error:'Identifiants incorrects.'}));
  }
- const session=crypto.randomBytes(32).toString('hex');sessions.set(session,now+sessionLifetime);
+ const session=crypto.randomBytes(32).toString('hex');sessions.set(session,{expires:now+sessionLifetime,userId:user.id});
  res.setHeader('Set-Cookie',`${cookieName}=${session}; Max-Age=${sessionLifetime/1000}${cookieOptions}`);
  res.setHeader('Content-Type','application/json');return res.end('{}');
  }
  if(url.pathname==='/api/logout' && req.method==='POST') {
  sessions.delete(token);res.setHeader('Set-Cookie',`${cookieName}=; Max-Age=0${cookieOptions}`);res.setHeader('Content-Type','application/json');return res.end('{}');
  }
+ const currentUser=localOnly?{id:0,name:'Développement local',username:'local',role:'admin',active:1}:db.prepare('SELECT * FROM users WHERE id=?').get(sessions.get(token)?.userId||-1);
+ if(!localOnly && !currentUser?.active) sessions.delete(token);
  if(url.pathname==='/login' && req.method==='GET') {
  if(localOnly || sessions.has(token)){res.writeHead(303,{Location:'/'});return res.end();}
  res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(fs.readFileSync(path.join(__dirname,'public/login.html')));
@@ -89,9 +106,28 @@ const server=http.createServer(async(req,res)=>{
  }
  if(url.pathname.startsWith('/api/')){
  res.setHeader('Content-Type','application/json');
- if(req.method==='GET' && url.pathname==='/api/state'){return res.end(JSON.stringify(Object.fromEntries([...kinds.map(k=>[k,list(k)]),['settings',JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data || '{}')]])));}
+ if(req.method==='GET' && url.pathname==='/api/state'){return res.end(JSON.stringify(Object.fromEntries([...kinds.map(k=>[k,list(k)]),['currentUser',publicUser(currentUser)],['users',currentUser.role==='admin'?db.prepare('SELECT id,username,name,role,active FROM users ORDER BY id').all().map(publicUser):[]],['settings',JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data || '{}')]])));}
  let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>1000000)throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');
- const kind=url.pathname.split('/')[2];if(kind==='settings'){db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(body));return res.end('{}');}
+ if(url.pathname==='/api/users' && req.method==='POST') {
+ if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}
+ const existing=body.id?db.prepare('SELECT * FROM users WHERE id=?').get(Number(body.id)):null;
+ if(body.id && !existing)throw Error('Compte introuvable');
+ const userName=typeof body.username==='string'?body.username.trim():'';
+ const name=typeof body.name==='string'?body.name.trim():'';
+ if(!/^[a-zA-Z0-9_.@-]{3,80}$/.test(userName)||!name||name.length>100||!['admin','user'].includes(body.role)||typeof body.active!=='boolean')throw Error('Informations utilisateur invalides');
+ if(!existing || body.password){if(typeof body.password!=='string'||body.password.length<16||body.password.length>256)throw Error('Mot de passe : entre 16 et 256 caractères');}
+ const hash=body.password?await hashPassword(body.password):existing.password_hash;
+ db.exec('BEGIN IMMEDIATE');try {
+ const latest=existing?db.prepare('SELECT * FROM users WHERE id=?').get(existing.id):null;
+ if(latest?.role==='admin' && latest.active && (body.role!=='admin'||!body.active) && db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='admin' AND active=1").get().n<=1)throw Error('Conservez au moins un administrateur actif');
+ if(existing)db.prepare('UPDATE users SET username=?,name=?,password_hash=?,role=?,active=? WHERE id=?').run(userName,name,hash,body.role,Number(body.active),existing.id);
+ else db.prepare('INSERT INTO users(username,name,password_hash,role,active) VALUES(?,?,?,?,?)').run(userName,name,hash,body.role,Number(body.active));
+ db.exec('COMMIT');
+ }catch(error){db.exec('ROLLBACK');if(error.message.includes('UNIQUE'))throw Error('Ce nom de connexion existe déjà');throw error;}
+ if(existing)revokeUser(existing.id);
+ return res.end('{}');
+ }
+ const kind=url.pathname.split('/')[2];if(kind==='settings'){if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(body));return res.end('{}');}
  if(!kinds.includes(kind))throw Error('Module inconnu');
  if(req.method==='DELETE'){
  const id=Number(url.pathname.split('/')[3]);const item=list(kind).find(x=>x.id===id);
@@ -119,4 +155,4 @@ const server=http.createServer(async(req,res)=>{
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(path.join(__dirname,'public',file)));
  }catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}
 });
-server.listen(process.env.PORT||3000,process.env.HOST||'127.0.0.1',()=>console.log('GestStock démarré'));
+initialization.then(()=>server.listen(process.env.PORT||3000,process.env.HOST||'127.0.0.1',()=>console.log('GestStock démarré'))).catch(error=>{console.error(error.message);process.exit(1);});

@@ -20,7 +20,7 @@ La base locale est `data/stock.db` (ignorée par Git). Sauvegarder cette base r�
 
 ## Limites de la première version
 
-Un seul compte administrateur ; pas encore de rôles ni gestion multi-utilisateurs. Authentification par session, HTTPS requis sur un hébergement. La limitation des tentatives repose sur l’adresse du pair réseau ; derrière un proxy, cette limite peut être partagée. Pas encore de paiements, avoirs, retours, comptabilité ou garantie de conformité fiscale. Ajuster le modèle de chèque au formulaire bancaire avant utilisation ; le montant en lettres est saisi manuellement. L’impression utilise la boîte de dialogue du navigateur et nécessite une imprimante compatible.
+Deux rôles : administrateur (accès complet) et utilisateur (gestion commerciale sans gestion des comptes ni paramètres). Authentification par session, HTTPS requis sur un hébergement. La limitation des tentatives repose sur l’adresse du pair réseau ; derrière un proxy, cette limite peut être partagée. Pas encore de paiements, avoirs, retours, comptabilité ou garantie de conformité fiscale. Ajuster le modèle de chèque au formulaire bancaire avant utilisation ; le montant en lettres est saisi manuellement. L’impression utilise la boîte de dialogue du navigateur et nécessite une imprimante compatible.
 
 ## Hostinger et sauvegardes
 
@@ -31,3 +31,9 @@ Un seul compte administrateur ; pas encore de rôles ni gestion multi-utilisateu
 - Ces copies sur le même serveur ne remplacent pas une sauvegarde externe. Télécharger régulièrement une copie journalière et vérifier la restauration sur une base de test.
 - Vérifier que les données restent visibles après redémarrage et après un déploiement. Une migration depuis la base initiale nécessite de ne pas saisir de nouvelles données entre sauvegarde et bascule.
 - Restauration : arrêter les écritures et le serveur via une procédure prise en charge par l’hébergeur, préserver la base actuelle, restaurer la copie sélectionnée au chemin `DB_PATH`, puis redémarrer et contrôler les données. Ne jamais remplacer une base utilisée par un processus actif.
+
+## Gestion des utilisateurs
+
+Au premier démarrage sur une base sans comptes, `ADMIN_USER` et `ADMIN_PASSWORD` initialisent le premier administrateur. Sur une base contenant déjà des comptes, ces variables ne réinitialisent aucun mot de passe. Le menu Utilisateurs, accessible aux administrateurs, permet de créer des comptes, modifier le nom et le rôle, réinitialiser le mot de passe et désactiver un compte. Une modification révoque les sessions du compte concerné ; un utilisateur désactivé ne peut plus se connecter. Le dernier administrateur actif ne peut pas être désactivé ou rétrogradé. Les mots de passe sont stockés sous forme de hash scrypt avec un sel propre à chaque mot de passe, et ne sont jamais renvoyés à l’interface.
+
+Les comptes sont conservés dans la même base permanente que les données commerciales et inclus dans les nouvelles sauvegardes. Une sauvegarde antérieure à la création des utilisateurs ne contient pas ces comptes. Il n’y a pas encore de récupération automatique par email ; conserver au moins un accès administrateur et les sauvegardes.
