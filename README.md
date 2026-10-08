@@ -41,3 +41,9 @@ Les comptes sont conservés dans la même base permanente que les données comme
 ## Charges et paiements
 
 Le menu Charges permet de saisir les dépenses (libellé, catégorie, montant total, date, fournisseur facultatif, référence et notes), consulter l’historique filtré par dates, recherche et statut, puis enregistrer les paiements partiels ou complets. Les soldes sont calculés en centimes ; un paiement ne peut pas dépasser le reste dû. Les charges et paiements sont conservés dans l’historique, sans suppression ni modification dans cette première version. Le nom de l’utilisateur ayant saisi l’opération est enregistré. Les paiements décrivent des opérations déjà effectuées ; ils ne déclenchent aucun transfert bancaire. Les charges ne modifient pas le stock ni les factures commerciales.
+
+## Charges périodiques
+
+Dans Charges → Charges périodiques : création, modification et Pause / Activer des échéances mensuelles. Quatre modèles sont initialisés une seule fois : WIFI 149, LKRA 1250, TISALAT LMAGHRIB 59 et LA CRECHE DYAL OMAR 500, dans la devise de l’entreprise (MAD par défaut). Leur première échéance correspond au premier jour du mois de l’installation de cette fonction ; aucun mois antérieur n’est ajouté. Les charges déjà saisies manuellement ne sont pas fusionnées automatiquement avec ces échéances.
+
+Le serveur vérifie les échéances chaque minute, au démarrage et au chargement des données. Une occurrence unique par modèle et mois empêche les doublons. Si le serveur était arrêté, les mois actifs manquants sont rattrapés à son retour. Le calendrier utilise UTC. Les modifications de montant et de libellé ne concernent que les prochaines charges ; les dépenses et paiements déjà créés sont conservés. Les mois en pause sont ignorés et ne sont pas rattrapés à la reprise ; une reprise pendant un mois déjà ignoré prend effet au mois suivant. Pause n’annule pas une charge du mois déjà créée. Le règlement reste manuel dans Paiements des charges.

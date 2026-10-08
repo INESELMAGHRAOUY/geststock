@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {DatabaseSync, backup} = require('node:sqlite');
 const crypto = require('node:crypto');
+const {setupRecurring,syncRecurring}=require('./recurring');
 const username = process.env.ADMIN_USER;
 const password = process.env.ADMIN_PASSWORD;
 const localOnly = process.env.ALLOW_LOCAL_NO_AUTH === '1' && (!process.env.HOST || process.env.HOST === '127.0.0.1');
@@ -34,6 +35,9 @@ const initialization=(async()=>{
 })();
 const publicUser=user=>({id:user.id,username:user.username,name:user.name,role:user.role,active:!!user.active});
 function revokeUser(id){for(const [key,session] of sessions) if(session.userId===id)sessions.delete(key);}
+setupRecurring(db);
+syncRecurring(db);
+setInterval(()=>{try{syncRecurring(db);}catch(e){console.error('Charges périodiques :',e.message);}},60*1000).unref();
 const backupDir = process.env.BACKUP_DIR || path.join(path.dirname(databasePath), 'backups');
 let backingUp = false;
 async function dailyBackup() {
@@ -106,7 +110,7 @@ const server=http.createServer(async(req,res)=>{
  }
  if(url.pathname.startsWith('/api/')){
  res.setHeader('Content-Type','application/json');
- if(req.method==='GET' && url.pathname==='/api/state'){return res.end(JSON.stringify(Object.fromEntries([...kinds.map(k=>[k,list(k)]),['currentUser',publicUser(currentUser)],['users',currentUser.role==='admin'?db.prepare('SELECT id,username,name,role,active FROM users ORDER BY id').all().map(publicUser):[]],['settings',JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data || '{}')]])));}
+ if(req.method==='GET' && url.pathname==='/api/state'){syncRecurring(db);return res.end(JSON.stringify(Object.fromEntries([...kinds.map(k=>[k,list(k)]),['recurringCharges',db.prepare('SELECT * FROM recurring_charges ORDER BY id').all().map(x=>({id:x.id,label:x.label,category:x.category,amount:x.amount_cents/100,active:!!x.active,startMonth:x.start_month,lastMonth:x.last_month}))],['currentUser',publicUser(currentUser)],['users',currentUser.role==='admin'?db.prepare('SELECT id,username,name,role,active FROM users ORDER BY id').all().map(publicUser):[]],['settings',JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data || '{}')]])));}
  let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>1000000)throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');
  if(url.pathname==='/api/users' && req.method==='POST') {
  if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}
@@ -126,6 +130,17 @@ const server=http.createServer(async(req,res)=>{
  }catch(error){db.exec('ROLLBACK');if(error.message.includes('UNIQUE'))throw Error('Ce nom de connexion existe déjà');throw error;}
  if(existing)revokeUser(existing.id);
  return res.end('{}');
+ }
+ if(url.pathname==='/api/recurringCharges' && req.method==='POST'){
+ syncRecurring(db);
+ if(typeof body.label!=='string'||!body.label.trim()||typeof body.category!=='string'||!body.category.trim()||typeof body.active!=='boolean'||!Number.isFinite(body.amount)||body.amount<=0||!Number.isSafeInteger(Math.round(body.amount*100))||Math.abs(body.amount*100-Math.round(body.amount*100))>0.00001)throw Error('Charge périodique invalide');
+ if(typeof body.startMonth!=='string'||!/^\d{4}-(0[1-9]|1[0-2])$/.test(body.startMonth)||body.startMonth<'2020-01'||body.startMonth>'2100-12')throw Error('Mois de début invalide');
+ const existing=body.id?db.prepare('SELECT * FROM recurring_charges WHERE id=?').get(body.id):null;
+ if(body.id&&!existing)throw Error('Charge périodique introuvable');
+ if(!existing&&body.startMonth<new Date().toISOString().slice(0,7))throw Error('Choisissez le mois actuel ou un mois futur');
+ if(existing)db.prepare('UPDATE recurring_charges SET label=?,category=?,amount_cents=?,active=?,start_month=? WHERE id=?').run(body.label.trim(),body.category.trim(),Math.round(body.amount*100),Number(body.active),body.startMonth,body.id);
+ else db.prepare('INSERT INTO recurring_charges(label,category,amount_cents,active,start_month) VALUES(?,?,?,?,?)').run(body.label.trim(),body.category.trim(),Math.round(body.amount*100),Number(body.active),body.startMonth);
+ syncRecurring(db);return res.end('{}');
  }
  const kind=url.pathname.split('/')[2];if(kind==='settings'){if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(body));return res.end('{}');}
  if(!kinds.includes(kind))throw Error('Module inconnu');

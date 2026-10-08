@@ -34,7 +34,11 @@ test('devis, facture, stock insuffisant, réception et persistance',async()=>{
  assert.equal((await request('expenses',{...expenseBody,date:'2026-02-30'})).status,400);
  assert.equal((await request('expenses',{...expenseBody,amount:1.234})).status,400);
  assert.equal((await request('expensePayments',{...payment,expenseId:99999})).status,400);
- s=(await request('state')).data;assert.equal(s.expenses.length,1);assert.equal(s.expensePayments.length,2);assert.equal(s.expensePayments.reduce((sum,p)=>sum+p.amountCents,0),100000);
- await new Promise(resolve=>{child.once('exit',resolve);child.kill();});await start();assert.equal((await request('state')).data.products[0].stock,8);assert.equal((await request('state')).data.clients[0].name,'Client modifié');assert.equal((await request('state')).data.expensePayments.length,2);
+ s=(await request('state')).data;assert.equal(s.expenses.length,5);assert.equal(s.expensePayments.length,2);assert.equal(s.expensePayments.reduce((sum,p)=>sum+p.amountCents,0),100000);
+ const periodic=(await request('state')).data.recurringCharges.find(x=>x.label==='WIFI');
+ assert.equal((await request('recurringCharges',{...periodic,amount:199,active:false})).status,200);
+ let changed=(await request('state')).data.recurringCharges.find(x=>x.id===periodic.id);assert.equal(changed.amount,199);assert.equal(changed.active,false);
+ assert.equal((await request('recurringCharges',{...changed,amount:0})).status,400);
+ await new Promise(resolve=>{child.once('exit',resolve);child.kill();});await start();assert.equal((await request('state')).data.products[0].stock,8);assert.equal((await request('state')).data.clients[0].name,'Client modifié');assert.equal((await request('state')).data.expensePayments.length,2);assert.equal((await request('state')).data.recurringCharges.find(x=>x.label==='WIFI').active,false);
  }finally{if(child&&!child.killed)await new Promise(resolve=>{child.once('exit',resolve);child.kill();});fs.rmSync(dir,{recursive:true,force:true});}
 });
