@@ -39,6 +39,7 @@ setupRecurring(db);
 syncRecurring(db);
 setInterval(()=>{try{syncRecurring(db);}catch(e){console.error('Charges périodiques :',e.message);}},60*1000).unref();
 db.exec('CREATE TABLE IF NOT EXISTS payment_attachments(id INTEGER PRIMARY KEY,name TEXT NOT NULL,mime TEXT NOT NULL,content BLOB NOT NULL)');
+db.exec('CREATE TABLE IF NOT EXISTS expense_lifecycle_history(id INTEGER PRIMARY KEY,expense_id INTEGER NOT NULL,action TEXT NOT NULL,reason TEXT NOT NULL,actor TEXT NOT NULL,at TEXT NOT NULL,snapshot TEXT NOT NULL)');
 const backupDir = process.env.BACKUP_DIR || path.join(path.dirname(databasePath), 'backups');
 let backingUp = false;
 async function dailyBackup() {
@@ -124,7 +125,7 @@ const server=http.createServer(async(req,res)=>{
  res.setHeader('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(attachment.name));
  return res.end(Buffer.from(attachment.content));
  }
- if(req.method==='GET' && url.pathname==='/api/state'){syncRecurring(db);return res.end(JSON.stringify(Object.fromEntries([...kinds.map(k=>[k,list(k)]),['recurringCharges',db.prepare('SELECT * FROM recurring_charges ORDER BY id').all().map(x=>({id:x.id,label:x.label,category:x.category,amount:x.amount_cents/100,active:!!x.active,startMonth:x.start_month,lastMonth:x.last_month,supplierId:x.supplier_id||null,supplierName: list('suppliers').find(s=>s.id===x.supplier_id)?.name||''}))],['currentUser',publicUser(currentUser)],['users',currentUser.role==='admin'?db.prepare('SELECT id,username,name,role,active FROM users ORDER BY id').all().map(publicUser):[]],['settings',JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data || '{}')]])));}
+ if(req.method==='GET' && url.pathname==='/api/state'){syncRecurring(db);return res.end(JSON.stringify(Object.fromEntries([...kinds.map(k=>[k,list(k)]),['recurringCharges',db.prepare('SELECT * FROM recurring_charges ORDER BY id').all().map(x=>({id:x.id,label:x.label,category:x.category,amount:x.amount_cents/100,active:!!x.active,startMonth:x.start_month,lastMonth:x.last_month,supplierId:x.supplier_id||null,supplierName: list('suppliers').find(s=>s.id===x.supplier_id)?.name||''}))],['expenseLifecycleHistory',currentUser.role==='admin'?db.prepare('SELECT id,expense_id AS expenseId,action,reason,actor,at,snapshot FROM expense_lifecycle_history ORDER BY id DESC').all().map(x=>({...x,snapshot:JSON.parse(x.snapshot)})):[]],['currentUser',publicUser(currentUser)],['users',currentUser.role==='admin'?db.prepare('SELECT id,username,name,role,active FROM users ORDER BY id').all().map(publicUser):[]],['settings',JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data || '{}')]])));}
  let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>(url.pathname==='/api/expensePayments'?7500000:1000000))throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');
  if(url.pathname==='/api/users' && req.method==='POST') {
  if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}
@@ -160,6 +161,19 @@ const server=http.createServer(async(req,res)=>{
  }
  const kind=url.pathname.split('/')[2];if(kind==='settings'){if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(body));return res.end('{}');}
  if(!kinds.includes(kind))throw Error('Module inconnu');
+ if(kind==='expenses' && body.action==='setActive'){
+ if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Désactivation réservée aux administrateurs.'}));}
+ if(!Number.isSafeInteger(body.id)||typeof body.active!=='boolean'||typeof body.reason!=='string'||!body.reason.trim()||body.reason.length>1000)throw Error('Charge, état et motif obligatoires');
+ db.exec('BEGIN IMMEDIATE');try{
+ const expense=list('expenses').find(x=>x.id===body.id);if(!expense)throw Error('Charge introuvable');
+ if(body.expectedActive!==(expense.active!==false))throw Error('L’état de la charge a changé. Rechargez la page.');
+ if(body.active===(expense.active!==false))throw Error('La charge possède déjà cet état');
+ const at=new Date().toISOString();
+ save('expenses',{...expense,active:body.active,stateChangedAt:at,stateChangedBy:currentUser.name},expense.id);
+ db.prepare('INSERT INTO expense_lifecycle_history(expense_id,action,reason,actor,at,snapshot) VALUES(?,?,?,?,?,?)').run(expense.id,body.active?'Réactivation':'Désactivation',body.reason.trim(),currentUser.name,at,JSON.stringify(expense));
+ db.exec('COMMIT');return res.end('{}');
+ }catch(error){db.exec('ROLLBACK');throw error;}
+ }
  if(kind==='banks'){
  if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}
  if(req.method!=='POST')throw Error('Désactivez la banque pour conserver son historique');
@@ -173,6 +187,7 @@ const server=http.createServer(async(req,res)=>{
  const existing=Number.isSafeInteger(body.id)?list(kind).find(x=>x.id===body.id):null;
  if(!existing)throw Error('Paiement introuvable');
  if(body.expectedUpdatedAt!==(existing.updatedAt||existing.createdAt))throw Error('Le paiement a changé. Rechargez la page.');
+ if(body.action!=='attachment'&&list('expenses').find(x=>x.id===existing.expenseId)?.active===false)throw Error('Réactivez la charge avant de modifier ou valider son paiement');
  if(body.action==='validate'){
  if(existing.method!=='Chèque'||existing.status==='validated')throw Error('Ce chèque ne peut pas être validé');
  const value=body.clearedDate;
@@ -216,6 +231,7 @@ const server=http.createServer(async(req,res)=>{
  }
  db.exec('BEGIN IMMEDIATE');try {
  const expense=list('expenses').find(x=>x.id===body.expenseId);if(!expense)throw Error('Charge introuvable');
+ if(expense.active===false&&body.action!=='attachment')throw Error('Cette charge est non active');
  const paid=list('expensePayments').filter(p=>p.expenseId===expense.id&&p.id!==body.id).reduce((sum,p)=>sum+p.amountCents,0);
  if(amountCents>expense.amountCents-paid)throw Error('Le paiement dépasse le reste à payer');
  const supplierId=body.supplierId||expense.supplierId;

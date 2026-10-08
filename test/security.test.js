@@ -29,6 +29,8 @@ test('authentification, origine et sauvegarde SQLite',async()=>{
  assert.equal((await changeUser(staffAuth,{...employee,username:'another'})).status,403);
  assert.equal((await fetch(url+'/api/settings',{method:'POST',headers:{...staffAuth,Origin:url},body:'{}'})).status,403);
  assert.equal((await fetch(url+'/api/expensePayments',{method:'POST',headers:{...staffAuth,Origin:url},body:JSON.stringify({id:123,action:'validate'})})).status,403);
+ assert.equal((await fetch(url+'/api/expenses',{method:'POST',headers:{...staffAuth,Origin:url},body:JSON.stringify({id:123,action:'setActive',active:false,expectedActive:true,reason:'Duplicate'})})).status,403);
+ assert.deepEqual((await(await fetch(url+'/api/state',{headers:staffAuth})).json()).expenseLifecycleHistory,[]);
  assert.equal((await fetch(url+'/api/banks',{method:'POST',headers:{...staffAuth,Origin:url},body:JSON.stringify({name:'Banque',active:true})})).status,403);
  assert.equal((await fetch(url+'/api/products',{method:'POST',headers:{...staffAuth,Origin:url},body:JSON.stringify({name:'Staff article',price:10,stock:2,min:1})})).status,200);
  state=await(await fetch(url+'/api/state',{headers:staffAuth})).json();assert.deepEqual(state.users,[]);

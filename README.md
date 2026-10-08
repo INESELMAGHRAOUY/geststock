@@ -62,3 +62,9 @@ Pour le mode Chèque, banque, numéro du chèque et date d’échéance sont obl
 
 
 L’historique offre Imprimer pour chaque chèque : bénéficiaire, montant en lettres saisi manuellement et ville, puis impression du modèle générique. Vérifier le placement sur papier pour chaque banque. La fenêtre Joindre signé accepte un justificatif après impression et signature, même si le chèque n’a pas encore été encaissé. Les chèques créés avant la mise à jour, sans statut explicite, apparaissent En instance et doivent être validés manuellement s’ils ont déjà été encaissés.
+
+## Désactivation des charges et journal
+
+Dans Historique des charges, un administrateur peut Désactiver ou Réactiver une charge avec un motif obligatoire. Aucune charge ni aucun paiement n’est supprimé de SQLite. Le filtre Actives / Non actives / Toutes permet de retrouver les éléments archivés. L’onglet Historique des suppressions présente chaque changement d’état, son motif, l’utilisateur, la date UTC et les informations de la charge avant le changement.
+
+Une charge non active et ses paiements sont exclus des totaux actifs. Les paiements, chèques et justificatifs restent dans l’historique ; on peut toujours consulter et télécharger les pièces. Il faut réactiver la charge pour modifier ou valider ses paiements. Désactiver une échéance générée ne met pas en pause son modèle mensuel : utiliser Pause dans Charges périodiques pour arrêter les prochaines échéances. Le journal est conservé dans la base et ses nouvelles sauvegardes.
