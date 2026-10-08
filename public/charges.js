@@ -56,7 +56,7 @@ function renderChargePayments(){
  if(validationPayment)html+=`<div class="panel"><h3>Valider l’encaissement — ${esc(validationPayment.chequeNumber)}</h3><form id="validate-payment">${field('clearedDate','Date réelle d’encaissement','date',chargeDate())}<button>Confirmer l’encaissement</button><button type="button" id="cancel-payment-action" class="secondary">Annuler</button></form></div>`;
  if(attachmentPayment)html+=`<div class="panel"><h3>Joindre le justificatif signé — ${esc(attachmentPayment.chequeNumber||attachmentPayment.label)}</h3><form id="attach-payment"><label>Document signé (PDF, PNG, JPEG · 5 Mo)<input type="file" name="attachmentFile" accept="application/pdf,image/png,image/jpeg" required></label><button>Enregistrer le document</button><button type="button" id="cancel-payment-action" class="secondary">Annuler</button></form></div>`;
  if(printPayment)html+=`<div class="panel"><h3>Imprimer le chèque — ${esc(printPayment.chequeNumber)}</h3><form id="print-payment">${field('beneficiary','Bénéficiaire','text',printPayment.supplierName||printPayment.label)}<label>Montant en lettres<input name="words" value="${esc(amountToWords(printPayment.amount,state.settings.currency||'MAD'))}" readonly style="min-width:350px"></label><label>Ville<input name="city" value="Rabat" readonly></label><button>Imprimer</button><button type="button" id="cancel-payment-action" class="secondary">Annuler</button></form><p>Modèle générique : vérifiez les positions sur papier avant d’utiliser votre chèque bancaire.</p></div>`;
- html+=`<div class="panel" style="overflow-x:auto"><h3>Historique des paiements</h3>${table(['Date','Charge','Fournisseur','Montant','Mode','Statut','État charge','Banque','N° chèque','Échéance','Encaissement','Référence','Pièce jointe','Actions','Modifié par'],state.expensePayments.map(p=>[esc(p.date),esc(p.label),esc(p.supplierName),money(p.amount),esc(p.method),paymentIsPaid(p)?'Validé':'En instance',paymentHasActiveCharge(p)?'Active':'Non active',esc(p.bankName),esc(p.chequeNumber),esc(p.chequeDueDate),esc(p.clearedDate),esc(p.reference),p.attachment?`<a href="/api/attachments/${p.attachment.id}">${esc(p.attachment.name)}</a>`:'—',`${p.method==='Chèque'?`<button data-print-payment="${p.id}">Imprimer</button>`:''}${state.currentUser.role==='admin'?`${paymentHasActiveCharge(p)?`<button data-edit-payment="${p.id}" class="secondary">Modifier</button>`:''}<button data-attach-payment="${p.id}" class="secondary">Joindre signé</button>${paymentHasActiveCharge(p)&&p.method==='Chèque'&&!paymentIsPaid(p)?`<button data-validate-payment="${p.id}">Valider l’encaissement</button>`:''}`:''}`,esc(p.updatedBy||p.createdBy)]))}</div>`;
+ html+=`<div class="panel" style="overflow-x:auto"><h3>Historique des paiements</h3>${table(['Date','Charge','Fournisseur','Montant','Mode','Statut','État charge','Banque','N° chèque','Échéance','Encaissement','Référence','Pièce jointe','Actions','Modifié par'],state.expensePayments.map(p=>[esc(p.date),esc(p.label),esc(p.supplierName),money(p.amount),esc(p.method),paymentIsPaid(p)?'Validé':'En instance',paymentHasActiveCharge(p)?'Active':'Non active',esc(p.bankName),esc(p.chequeNumber),esc(p.chequeDueDate),esc(p.clearedDate),esc(p.reference),p.attachment?`<span class="attachment-present" aria-label="Pièce jointe présente" title="Pièce jointe présente">✓</span><button type="button" class="attachment-eye" data-view-attachment="${p.attachment.id}" aria-label="Voir la pièce jointe" title="Voir la pièce jointe"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button>`:'<span class="attachment-missing" aria-label="Aucune pièce jointe" title="Aucune pièce jointe">✕</span>',`${p.method==='Chèque'?`<button data-print-payment="${p.id}">Imprimer</button>`:''}${state.currentUser.role==='admin'?`${paymentHasActiveCharge(p)?`<button data-edit-payment="${p.id}" class="secondary">Modifier</button>`:''}<button data-attach-payment="${p.id}" class="secondary">Joindre signé</button>${paymentHasActiveCharge(p)&&p.method==='Chèque'&&!paymentIsPaid(p)?`<button data-validate-payment="${p.id}">Valider l’encaissement</button>`:''}`:''}`,esc(p.updatedBy||p.createdBy)]))}</div>`;
  return html;
 }
 async function paymentAttachment(file){
@@ -92,3 +92,30 @@ document.addEventListener('submit',async e=>{
  }
  }catch(error){$('#notice').textContent=error.message;}finally{button.disabled=false;}
 },true);
+
+let attachmentPreviewUrl=null,attachmentPreviewRequest=null;
+function clearAttachmentPreview(){
+ attachmentPreviewRequest?.abort();attachmentPreviewRequest=null;
+ document.querySelector('#attachment-preview-content').replaceChildren();
+ if(attachmentPreviewUrl){URL.revokeObjectURL(attachmentPreviewUrl);attachmentPreviewUrl=null;}
+}
+document.addEventListener('click',async e=>{
+ const close=e.target.closest('#close-attachment-preview');const dialog=document.querySelector('#attachment-preview');
+ if(close){dialog.close();return;}
+ const button=e.target.closest('[data-view-attachment]');if(!button)return;
+ clearAttachmentPreview();dialog.showModal();const content=document.querySelector('#attachment-preview-content');content.textContent='Chargement du document…';
+ const request=new AbortController();attachmentPreviewRequest=request;
+ try{
+ const response=await fetch('/api/attachments/'+button.dataset.viewAttachment,{signal:request.signal});
+ if(response.status===401){dialog.close();location.replace('/login');return;}
+ if(!response.ok)throw Error('Impossible d’ouvrir la pièce jointe.');
+ const blob=await response.blob();if(request.signal.aborted)return;
+ if(!['application/pdf','image/jpeg','image/png'].includes(blob.type))throw Error('Format non pris en charge pour la consultation.');
+ attachmentPreviewUrl=URL.createObjectURL(blob);
+ const element=document.createElement(blob.type==='application/pdf'?'iframe':'img');
+ element.src=attachmentPreviewUrl;
+ if(blob.type==='application/pdf')element.title='Aperçu du justificatif PDF';else element.alt='Justificatif du paiement';
+ content.replaceChildren(element);
+ }catch(error){if(error.name!=='AbortError')content.textContent=error.message;}
+});
+document.querySelector('#attachment-preview').addEventListener('close',clearAttachmentPreview);
