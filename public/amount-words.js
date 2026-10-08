@@ -27,7 +27,8 @@
  const names={MAD:['dirham','dirhams','centime','centimes'],EUR:['euro','euros','centime','centimes'],USD:['dollar','dollars','cent','cents']};
  const unit=names[String(currency).toUpperCase()]||[String(currency),String(currency),'centime','centimes'];
  // Exact multiples of a million take “de” before the currency noun.
- return integerWords(whole)+(whole>=1e6&&whole%1e6===0?' de ':' ')+unit[whole>1?1:0]+(fraction?' et '+integerWords(fraction)+' '+unit[fraction>1?3:2]:'');
+ const text=integerWords(whole)+(whole>=1e6&&whole%1e6===0?' de ':' ')+unit[whole>1?1:0]+(fraction?' et '+integerWords(fraction)+' '+unit[fraction>1?3:2]:'');
+ return text.charAt(0).toUpperCase()+text.slice(1);
  }
  root.amountToWords=amountToWords;
  if(typeof module!=='undefined'&&module.exports)module.exports={amountToWords};
