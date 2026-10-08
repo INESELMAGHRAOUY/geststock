@@ -1,17 +1,70 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const {DatabaseSync} = require('node:sqlite');
+const {DatabaseSync, backup} = require('node:sqlite');
+const crypto = require('node:crypto');
+const username = process.env.ADMIN_USER;
+const password = process.env.ADMIN_PASSWORD;
+const localOnly = process.env.ALLOW_LOCAL_NO_AUTH === '1' && (!process.env.HOST || process.env.HOST === '127.0.0.1');
+if (!localOnly && (!username || !password || password.length < 16)) {
+ console.error('Configurer ADMIN_USER et ADMIN_PASSWORD (16 caractères minimum).');
+ process.exit(1);
+}
+const digest = value => crypto.createHash('sha256').update(value).digest();
+const expected = digest(`${username}:${password}`);
+const failures = new Map();
 fs.mkdirSync(path.join(__dirname,'data'),{recursive:true});
-const db = new DatabaseSync(process.env.DB_PATH || path.join(__dirname,'data/stock.db'));
+const databasePath = path.resolve(process.env.DB_PATH || path.join(__dirname,'data/stock.db'));
+const db = new DatabaseSync(databasePath);
 db.exec(`PRAGMA foreign_keys=ON;
 CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY CHECK(id=1),data TEXT NOT NULL);`);
+const backupDir = process.env.BACKUP_DIR || path.join(path.dirname(databasePath), 'backups');
+let backingUp = false;
+async function dailyBackup() {
+ if (backingUp) return;
+ backingUp = true;
+ try {
+ fs.mkdirSync(backupDir,{recursive:true,mode:0o700});
+ const day = new Date().toISOString().slice(0,10);
+ const target = path.join(backupDir,`stock-${day}.db`);
+ if (!fs.existsSync(target)) {
+ const temporary = target + '.tmp';
+ await backup(db, temporary);
+ fs.chmodSync(temporary,0o600);
+ fs.renameSync(temporary,target);
+ }
+ const files = fs.readdirSync(backupDir).filter(f=>/^stock-\d{4}-\d{2}-\d{2}\.db$/.test(f)).sort().reverse();
+ for (const file of files.slice(30)) fs.unlinkSync(path.join(backupDir,file));
+ } catch (error) { console.error('Sauvegarde échouée :',error.message); }
+ finally { backingUp = false; }
+}
+dailyBackup();
+setInterval(dailyBackup,60*60*1000).unref();
 const list = kind => db.prepare('SELECT id,data FROM records WHERE kind=? ORDER BY id DESC').all(kind).map(r=>({ ...JSON.parse(r.data),id:r.id}));
 const kinds = ['products','clients','suppliers','documents','cheques','movements'];
 function save(kind,data,id){if(id) db.prepare('UPDATE records SET data=? WHERE id=? AND kind=?').run(JSON.stringify(data),id,kind);else id=Number(db.prepare('INSERT INTO records(kind,data) VALUES(?,?)').run(kind,JSON.stringify(data)).lastInsertRowid);return id;}
 const server=http.createServer(async(req,res)=>{
  try {
+ res.setHeader('Cache-Control','no-store');
+ res.setHeader('X-Content-Type-Options','nosniff');
+ res.setHeader('X-Frame-Options','DENY');
+ res.setHeader('Referrer-Policy','same-origin');
+ if (!localOnly) {
+ const address = req.socket.remoteAddress;
+ const now = Date.now();
+ for (const [key,value] of failures) if(now-value.start>60000) failures.delete(key);
+ if ((failures.get(address)?.count || 0)>=20) {res.writeHead(429,{'Retry-After':'60'});return res.end('Trop de tentatives. Réessayez dans une minute.');}
+ const header=req.headers.authorization||'';
+ const supplied=header.startsWith('Basic ')?Buffer.from(header.slice(6),'base64').toString():'';
+ if (!crypto.timingSafeEqual(digest(supplied),expected)) {
+ if(header) {const entry=failures.get(address)||{start:now,count:0};entry.count++;failures.set(address,entry);}
+ res.writeHead(401,{'WWW-Authenticate':'Basic realm="GestStock", charset="UTF-8"'});return res.end('Connexion requise');
+ }
+ }
+ if (!['GET','HEAD'].includes(req.method) && (req.headers['sec-fetch-site']==='cross-site' || (req.headers.origin && new URL(req.headers.origin).host!==req.headers.host))) {
+ res.writeHead(403);return res.end('Origine non autorisée');
+ }
  const url=new URL(req.url,'http://localhost');
  if(url.pathname.startsWith('/api/')){
  res.setHeader('Content-Type','application/json');
