@@ -1,0 +1,2 @@
+# geststock
+myapp
