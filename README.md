@@ -20,7 +20,7 @@ La base locale est `data/stock.db` (ignorée par Git). Sauvegarder cette base r�
 
 ## Limites de la première version
 
-Deux rôles : administrateur (accès complet) et utilisateur (gestion commerciale sans gestion des comptes ni paramètres). Authentification par session, HTTPS requis sur un hébergement. La limitation des tentatives repose sur l’adresse du pair réseau ; derrière un proxy, cette limite peut être partagée. Pas encore de paiements, avoirs, retours, comptabilité ou garantie de conformité fiscale. Ajuster le modèle de chèque au formulaire bancaire avant utilisation ; le montant en lettres est saisi manuellement. L’impression utilise la boîte de dialogue du navigateur et nécessite une imprimante compatible.
+Deux rôles : administrateur (accès complet) et utilisateur (gestion commerciale sans gestion des comptes ni paramètres). Authentification par session, HTTPS requis sur un hébergement. La limitation des tentatives repose sur l’adresse du pair réseau ; derrière un proxy, cette limite peut être partagée. Pas encore de paiements, avoirs, retours, comptabilité ou garantie de conformité fiscale. Ajuster le modèle de chèque au formulaire bancaire avant utilisation ; le montant en lettres est calculé automatiquement. L’impression utilise la boîte de dialogue du navigateur et nécessite une imprimante compatible.
 
 ## Hostinger et sauvegardes
 
@@ -61,10 +61,12 @@ Le menu Banques, réservé aux administrateurs, permet d’ajouter, modifier et 
 Pour le mode Chèque, banque, numéro du chèque et date d’échéance sont obligatoires. La date du paiement reste distincte de cette échéance. L’historique conserve une copie du nom de la banque et du compte lors de la saisie. Le chèque est En instance à la saisie. Son montant est réservé pour éviter un double paiement, mais seul un encaissement validé compte dans le montant payé. Un administrateur valide la date réelle d’encaissement, ajoute un justificatif signé après impression, ou modifie le paiement depuis l’historique. Un changement du montant, de la banque, du numéro ou de l’échéance remet le chèque en instance. Les versions antérieures, auteurs et dates sont conservés. L’échéance ne déclenche ni encaissement automatique ni vérification bancaire. Pas encore de rapprochement bancaire ni gestion des rejets.
 
 
-L’historique offre Imprimer pour chaque chèque : bénéficiaire, montant en lettres saisi manuellement et ville, puis impression du modèle générique. Vérifier le placement sur papier pour chaque banque. La fenêtre Joindre signé accepte un justificatif après impression et signature, même si le chèque n’a pas encore été encaissé. Les chèques créés avant la mise à jour, sans statut explicite, apparaissent En instance et doivent être validés manuellement s’ils ont déjà été encaissés.
+L’historique offre Imprimer pour chaque chèque : bénéficiaire, montant en lettres automatique et ville fixée à Rabat, puis impression du modèle générique. Vérifier le placement sur papier pour chaque banque. La fenêtre Joindre signé accepte un justificatif après impression et signature, même si le chèque n’a pas encore été encaissé. Les chèques créés avant la mise à jour, sans statut explicite, apparaissent En instance et doivent être validés manuellement s’ils ont déjà été encaissés.
 
 ## Désactivation des charges et journal
 
 Dans Historique des charges, un administrateur peut Désactiver ou Réactiver une charge avec un motif obligatoire. Aucune charge ni aucun paiement n’est supprimé de SQLite. Le filtre Actives / Non actives / Toutes permet de retrouver les éléments archivés. L’onglet Historique des suppressions présente chaque changement d’état, son motif, l’utilisateur, la date UTC et les informations de la charge avant le changement.
 
 Une charge non active et ses paiements sont exclus des totaux actifs. Les paiements, chèques et justificatifs restent dans l’historique ; on peut toujours consulter et télécharger les pièces. Il faut réactiver la charge pour modifier ou valider ses paiements. Désactiver une échéance générée ne met pas en pause son modèle mensuel : utiliser Pause dans Charges périodiques pour arrêter les prochaines échéances. Le journal est conservé dans la base et ses nouvelles sauvegardes.
+
+La conversion française des montants inclut les centimes et les règles de pluriel (cent, quatre-vingts, mille, millions). Elle est utilisée pour les chèques des paiements et dans le menu Chèques. La ville est toujours Rabat.

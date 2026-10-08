@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {DatabaseSync, backup} = require('node:sqlite');
 const crypto = require('node:crypto');
+const {amountToWords}=require('./public/amount-words');
 const {setupRecurring,syncRecurring}=require('./recurring');
 const username = process.env.ADMIN_USER;
 const password = process.env.ADMIN_PASSWORD;
@@ -281,10 +282,14 @@ const server=http.createServer(async(req,res)=>{
  if(kind==='movements'){
  const p=list('products').find(p=>p.id===body.productId);if(!p||!Number.isFinite(body.qty)||body.qty<=0)throw Error('Entrée invalide');
  db.exec('BEGIN');try{save('products',{...p,stock:p.stock+body.qty},p.id);save(kind,{...body,name:p.name,date:new Date().toISOString()});db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}return res.end('{}');}
- if(kind==='cheques'&&(!body.beneficiary?.trim()||!Number.isFinite(body.amount)||body.amount<=0))throw Error('Chèque invalide');
+ if(kind==='cheques'){
+ if(!body.beneficiary?.trim()||!Number.isFinite(body.amount)||body.amount<=0)throw Error('Chèque invalide');
+ const currency=JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data||'{}').currency||'MAD';
+ body.words=amountToWords(body.amount,currency);body.city='Rabat';
+ }
  return res.end(JSON.stringify({id:save(kind,body,body.id)}));
  }
- const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','charges.js'].includes(file)){res.writeHead(404);return res.end();}
+ const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','charges.js','amount-words.js'].includes(file)){res.writeHead(404);return res.end();}
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(path.join(__dirname,'public',file)));
  }catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}
 });

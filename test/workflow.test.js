@@ -8,7 +8,8 @@ test('devis, facture, stock insuffisant, réception et persistance',async()=>{
  assert.equal((await request('documents',{...doc,type:'Facture'})).status,200);let s=(await request('state')).data;assert.equal(s.products[0].stock,3);assert.equal(s.documents[0].total,240);
  assert.equal((await request('documents',{...doc,type:'Facture',lines:[{productId:p,qty:2},{productId:p,qty:2}]})).status,400);s=(await request('state')).data;assert.equal(s.products[0].stock,3);assert.equal(s.documents.length,2);
  assert.equal((await request('movements',{productId:p,qty:4,reference:'REC-1'})).status,200);assert.equal((await request('state')).data.products[0].stock,7);
- assert.equal((await request('cheques',{beneficiary:'Fournisseur',amount:120,words:'Cent vingt dirhams'})).status,200);
+ assert.equal((await request('cheques',{beneficiary:'Fournisseur',amount:120,words:'Texte incorrect',city:'Autre ville'})).status,200);
+ const chequePrint=(await request('state')).data.cheques[0];assert.equal(chequePrint.words,'cent vingt dirhams');assert.equal(chequePrint.city,'Rabat');
  const productUpdate={id:p,name:'Article modifié',sku:'NEW',price:150,stock:8,min:3,expectedStock:7};
  assert.equal((await request('products',productUpdate)).status,200);
  assert.equal((await request('products',{...productUpdate,stock:9})).status,400);
