@@ -10,7 +10,7 @@ test('multi-store Jumia orders, delivery profitability, purchase-stock shipping 
  const line=(productId,name,status)=>({productId,name,qty:1,purchasePrice:name==='A'?100:50,salePrice:name==='A'?199:100,status,fromStock:false,commissionPercent:10,commissionActual:null,shippingContribution:6,otherFees:0,refundCredit:0});
  const hub=run('jumiaHubs',{name:'Hub Rabat 1',city:'Rabat',address:'Adresse du hub'}).id;
  const body={hubId:hub,storeId:s1,number:'378395468',date:'2026-10-08',lines:[line(p1,'A','En attente'),line(p2,'B','En attente')],costs:{ticketQty:1,ticketUnitPrice:1,saltKg:.5,saltUnitPrice:2,cartonQty:1,cartonUnitPrice:3,supplierTransport:10,hubTransport:5}};
- body.lines[0].sku='IGNORED-MANUAL-SKU';const id=run('jumiaOrders',body).id;assert.equal(list('jumiaOrders').find(o=>o.id===id).lines[0].sku,'PRODUCT-SKU');assert.equal(list('jumiaOrders').find(o=>o.id===id).hubCity,'Rabat');assert.equal(list('products').find(p=>p.id===p1).stock,0);assert.throws(()=>run('jumiaOrders',body),/existe déjà/);
+ body.lines[0].sku='IGNORED-MANUAL-SKU';const id=run('jumiaOrders',body).id;assert.equal(list('jumiaOrders').find(o=>o.id===id).lines[0].sku,'IGNORED-MANUAL-SKU');assert.equal(list('jumiaOrders').find(o=>o.id===id).hubCity,'Rabat');assert.equal(list('products').find(p=>p.id===p1).stock,0);assert.throws(()=>run('jumiaOrders',body),/existe déjà/);
  const other=run('jumiaOrders',{...body,storeId:s2,lines:[line(p1,'A','En attente')]}).id;assert.equal(jumiaSummary(list('jumiaOrders')).count,2);
  const savedHub=list('jumiaHubs').find(h=>h.id===hub);run('jumiaHubs',{id:hub,expectedRecord:JSON.stringify(savedHub),action:'setActive',active:false,reason:'Pause'});assert.throws(()=>run('jumiaOrders',{...body,number:'NEW-HUB-INACTIVE'}),/Hub indisponible/);
  let o=list('jumiaOrders').find(o=>o.id===id);run('jumiaOrders',{id,expectedRecord:JSON.stringify(o),action:'ready'});o=list('jumiaOrders').find(o=>o.id===id);assert.ok(o.lines.every(l=>l.status==='Prêt à expédier'));assert.equal(list('products').find(p=>p.id===p1).stock,0);assert.throws(()=>run('jumiaOrders',{id,expectedRecord:JSON.stringify(o),action:'ready'}),/Aucune ligne/);const edit=data=>run('jumiaOrders',{...o,...data,id,expectedRecord:JSON.stringify(o),reason:'Status update'});
@@ -25,4 +25,23 @@ test('multi-store Jumia orders, delivery profitability, purchase-stock shipping 
  edit({lines:o.lines.map((l,i)=>i===0?{...l,status:'Retourné',returnedToStock:true}:l)});o=list('jumiaOrders').find(o=>o.id===id);t=jumiaOrderTotals(o);assert.equal(t.revenue,10000);assert.equal(list('products').find(p=>p.id===p1).stock,2);assert.equal(list('products').find(p=>p.id===p2).stock,0);
  run('jumiaOrders',{id,expectedRecord:JSON.stringify(o),action:'setActive',active:false,reason:'Archive'});assert.equal(list('products').find(p=>p.id===p2).stock,1);assert.equal(jumiaSummary(list('jumiaOrders')).count,1);
  assert.throws(()=>run('jumiaOrders',{...body,number:'UNLINKED',lines:[{...line(null,'A','En attente')}]}),/Enregistrez/);db.close();
+});
+test('store listings support multiple seller SKUs for one stock product and preserve historical SKUs',()=>{
+ const db=new DatabaseSync(':memory:');db.exec('CREATE TABLE records(id INTEGER PRIMARY KEY,kind TEXT,data TEXT)');setupRecordAudit(db);
+ const raw=kind=>db.prepare('SELECT id,data FROM records WHERE kind=?').all(kind).map(r=>({...JSON.parse(r.data),id:r.id}));
+ const list=kind=>kind==='products'?raw(kind).map(p=>stockBreakdown(p,[],[],[],raw('jumiaOrders'))):raw(kind);
+ const save=(kind,data,id)=>{if(id){db.prepare('UPDATE records SET data=? WHERE id=?').run(JSON.stringify(data),id);return id;}return Number(db.prepare('INSERT INTO records(kind,data) VALUES(?,?)').run(kind,JSON.stringify(data)).lastInsertRowid);};
+ const user={role:'admin',name:'Admin'},run=(kind,body)=>handleJumia({db,kind,body,user,list,save});
+ const p=save('products',{name:'One product',sku:'INTERNAL',price:100,purchasePrice:20,initialStock:2});
+ const id=run('jumiaStores',{name:'Shop A',commissionPercent:10,listings:[{productId:p,sku:'SKU-1'},{productId:p,sku:'SKU-2'}]}).id;
+ let store=list('jumiaStores')[0];assert.equal(store.listings.length,2);assert.notEqual(store.listings[0].id,store.listings[1].id);
+ assert.throws(()=>run('jumiaStores',{...store,id,expectedRecord:JSON.stringify(store),reason:'Duplicate',listings:[{productId:p,sku:'SKU-1'},{productId:p,sku:'sku-1'}]}),/unique/);
+ const other=run('jumiaStores',{name:'Shop B',listings:[{productId:p,sku:'SKU-1'}]}).id;
+ const body={storeId:id,number:'MULTI',date:'2026-10-09',costs:{},lines:store.listings.map(l=>({productId:p,listingId:l.id,sku:'FAKE',qty:1,salePrice:100,status:'Prêt à expédier'}))};
+ assert.throws(()=>run('jumiaOrders',{...body,storeId:other}),/Listing indisponible/);
+ const orderId=run('jumiaOrders',body).id;let o=list('jumiaOrders')[0];assert.deepEqual(o.lines.map(l=>l.sku),['SKU-1','SKU-2']);
+ run('jumiaOrders',{id:orderId,expectedRecord:JSON.stringify(o),action:'ship'});o=list('jumiaOrders')[0];assert.equal(list('products')[0].stock,0);
+ run('jumiaStores',{...store,id,expectedRecord:JSON.stringify(store),reason:'Rename listing',listings:store.listings.map(l=>({...l,sku:l.sku+'-NEW'}))});
+ run('jumiaOrders',{...o,id:orderId,expectedRecord:JSON.stringify(o),reason:'Notes',notes:'Still old SKU'});o=list('jumiaOrders')[0];assert.deepEqual(o.lines.map(l=>l.sku),['SKU-1','SKU-2']);assert.equal(list('products')[0].stock,0);
+ db.close();
 });
