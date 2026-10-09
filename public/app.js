@@ -104,7 +104,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('button');i
  if(b.id==='cancel-contact'){editingContact=null;render();}
  if(b.dataset.chargeTab){chargeTab=b.dataset.chargeTab;render();}
  if(b.dataset.payExpense){chargeTab='payments';selectedExpense=Number(b.dataset.payExpense);render();}
- if(b.dataset.navGroup){const group=b.dataset.navGroup;if(openNavGroups.has(group))openNavGroups.delete(group);else openNavGroups.add(group);$('#nav').innerHTML=renderNavigation();}
+ if(b.dataset.navGroup){const group=b.dataset.navGroup;const wasOpen=openNavGroups.has(group);openNavGroups.clear();if(!wasOpen)openNavGroups.add(group);$('#nav').innerHTML=renderNavigation();}
  if(b.dataset.page){editingProduct=null;editingContact=null;page=b.dataset.page;if(b.dataset.navTab)chargeTab=b.dataset.navTab;render();}
  if(b.dataset.delete&&confirm('Supprimer cet élément ?')){await api(b.dataset.delete,null,'DELETE');if(editingProduct&&b.dataset.delete==='products/'+editingProduct.id)editingProduct=null;if(editingContact&&b.dataset.delete===editingContact.kind+'/'+editingContact.data.id)editingContact=null;await load();}
  if(b.id==='add-line'){lines.push({productId:'',qty:1});renderLines();}
