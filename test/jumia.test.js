@@ -46,3 +46,9 @@ test('store listings support multiple seller SKUs for one stock product and pres
  run('jumiaOrders',{...o,id:orderId,expectedRecord:JSON.stringify(o),reason:'Notes',notes:'Still old SKU'});o=list('jumiaOrders')[0];assert.deepEqual(o.lines.map(l=>l.sku),['SKU-1','SKU-2']);assert.equal(list('products')[0].stock,0);
  db.close();
 });
+test('Jumia shipping contribution is charged for every unit sold',()=>{
+ const order={lines:[{qty:2,salePrice:100,purchasePrice:20,status:'Livré',commissionPercent:10,commissionActual:null,shippingContribution:6,otherFees:0,refundCredit:0}],costs:{ticketQty:0,cartonQty:0,saltKg:0}};
+ let t=jumiaOrderTotals(order);assert.equal(t.marketplaceFees,3200);assert.equal(t.profit,12800);
+ order.lines[0].qty=3;t=jumiaOrderTotals(order);assert.equal(t.marketplaceFees,4800);assert.equal(t.forecast,19200);assert.equal(t.profit,19200);
+ order.lines[0].shippingContribution=0;assert.equal(jumiaOrderTotals(order).marketplaceFees,3000);
+});

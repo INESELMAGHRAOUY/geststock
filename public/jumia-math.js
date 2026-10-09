@@ -6,8 +6,8 @@
  let revenue=0,productCost=0,marketplaceFees=0,forecast=0;
  for(const l of order.lines){const gross=cents(l.salePrice)*l.qty,buy=cents(l.purchasePrice)*l.qty,fees=l.commissionActual!==null&&l.commissionActual!==undefined?cents(l.commissionActual):(l.status==='Livré'?Math.round(gross*l.commissionPercent/100):0);
  if(l.status==='Livré'){revenue+=gross;productCost+=buy;}else if(l.lost)productCost+=buy;
- marketplaceFees+=fees+cents(l.shippingContribution)+cents(l.otherFees)-cents(l.refundCredit);
- if(!['Annulé','Retourné','La livraison a échoué'].includes(l.status))forecast+=gross-buy-(l.commissionActual!==null&&l.commissionActual!==undefined?cents(l.commissionActual):Math.round(gross*l.commissionPercent/100))-cents(l.shippingContribution)-cents(l.otherFees)+cents(l.refundCredit);
+ marketplaceFees+=fees+cents(l.shippingContribution)*l.qty+cents(l.otherFees)-cents(l.refundCredit);
+ if(!['Annulé','Retourné','La livraison a échoué'].includes(l.status))forecast+=gross-buy-(l.commissionActual!==null&&l.commissionActual!==undefined?cents(l.commissionActual):Math.round(gross*l.commissionPercent/100))-cents(l.shippingContribution)*l.qty-cents(l.otherFees)+cents(l.refundCredit);
  }
  const c=order.costs||{},logistics=cents(c.supplierTransport)+cents(c.hubTransport)+Math.round(c.ticketQty*cents(c.ticketUnitPrice))+Math.round(c.saltKg*cents(c.saltUnitPrice))+Math.round(c.cartonQty*cents(c.cartonUnitPrice))+cents(c.other);
  return {revenue,productCost,marketplaceFees,logistics,netJumia:revenue-marketplaceFees,profit:revenue-marketplaceFees-productCost-logistics,forecast:forecast-logistics};
