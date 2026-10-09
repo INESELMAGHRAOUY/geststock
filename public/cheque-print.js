@@ -23,7 +23,7 @@
  const formattedDate=String(date||'').split('-').reverse().join('/');
  if(template==='cdm'){
  const numeric='#'+Number(amount).toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2}).replace(/[\u202f\u00a0]/g,' ').replace(',','.')+'#';
- return `<div class="cheque-word"><div class="cheque-word-content" style="transform:translate(${Number(offsetX)||0}mm,${Number(offsetY)||0}mm)"><p class="word-amount" dir="ltr">${escape(numeric)}</p><p class="word-words" dir="rtl">${escape(amountToArabicWords(amount))}</p><p class="word-beneficiary" dir="rtl">${escape(beneficiary)}</p><p class="word-date"><span dir="ltr">${escape(formattedDate)}</span><span dir="rtl">الرباط</span></p></div></div>`;
+ return `<div class="cheque-word"><div class="cheque-word-content" style="transform:translate(${Number(offsetX)||0}mm,${Number(offsetY)||0}mm)"><p class="word-amount" dir="ltr">${escape(numeric)}</p><p class="word-words" dir="rtl">${escape(amountToArabicWords(amount))}</p><p class="word-beneficiary" dir="rtl">${escape(beneficiary)}</p><p class="word-date"><span class="word-date-value" dir="ltr">${escape(formattedDate)}</span><span class="word-city" dir="rtl">الرباط</span></p></div></div>`;
  }
  return `<div class="cheque"><div class="amount">${escape(Number(amount).toFixed(2))}</div><div class="words">${escape(root.amountToWords(amount))}</div><div class="beneficiary">${escape(beneficiary)}</div><div class="date">Rabat ${escape(formattedDate)}</div></div>`;
  }
