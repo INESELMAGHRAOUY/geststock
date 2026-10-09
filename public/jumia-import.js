@@ -13,5 +13,15 @@ function analyzeJumiaTransactions(rows){
  for(const [map,key] of [[orders,t['Order No.']||'Sans commande'],[skus,t['Seller SKU']||'Sans SKU']]){const g=map.get(key)||{key,sales:0,fees:0,net:0};g.net+=a;if(type==='Item Price Credit')g.sales+=a;else g.fees-=a;map.set(key,g);}}
  return {count:rows.length,approved:approved.length,excluded:rows.length-approved.length,sales,commission,shipping,net,paid,open,types:[...types].map(([key,net])=>({key,net})),orders:[...orders.values()],skus:[...skus.values()]};
 }
-root.analyzeJumiaTransactions=analyzeJumiaTransactions;if(typeof module!=='undefined'&&module.exports)module.exports={parseJumiaCSV,analyzeJumiaTransactions};
+function compareJumiaReports(reports,orders){
+ const groups=new Map();
+ for(const report of reports)for(const t of report.transactions){if(t['Transaction State']!=='APPROVED')continue;const key=JSON.stringify([report.storeId,t['Order No.'],t['Seller SKU']]);const g=groups.get(key)||{storeId:report.storeId,storeName:report.storeName,order:t['Order No.'],sku:t['Seller SKU'],sales:0,net:0,items:new Set(),uncertain:false};g.net+=t.amountCents;if(t['Transaction Type']==='Item Price Credit'){g.sales+=t.amountCents;if(t['Order Item No.'])g.items.add(t['Order Item No.']);else g.uncertain=true;if(t['Order Item Status']&&t['Order Item Status']!=='DELIVERED')g.uncertain=true;}groups.set(key,g);}
+ const details=[...groups.values()].map(g=>{const candidates=orders.filter(o=>o.active!==false&&o.storeId===g.storeId&&String(o.number).trim()===g.order);const order=candidates.length===1?candidates[0]:null,lines=order?.lines.filter(l=>String(l.sku||'').trim()===g.sku)||[],qty=g.items.size;let status='Rapproché';
+ if(!order)status=candidates.length>1?'Commande ambiguë':'Commande non saisie';else if(!lines.length)status='SKU absent de la commande';else if(!qty||g.uncertain)status='Quantité / retour à vérifier';else if(qty>lines.reduce((n,l)=>n+l.qty,0))status='Quantité importée supérieure à la saisie';else if(lines.some(l=>!Number.isFinite(l.purchasePrice)||l.purchasePrice<0)||new Set(lines.map(l=>l.purchasePrice)).size!==1||new Set(lines.map(l=>l.salePrice)).size!==1)status='Prix / lignes à vérifier';
+ const matched=status==='Rapproché',cost=matched?Math.round(lines[0].purchasePrice*100)*qty:null,entered=matched?Math.round(lines[0].salePrice*100)*qty:null,margin=matched?g.net-cost:null;return {...g,items:undefined,qty,status,cost,entered,difference:matched?g.sales-entered:null,margin,rate:matched&&cost>0?margin/cost*100:null};});
+ const skus=new Map();for(const d of details){const key=JSON.stringify([d.storeId,d.sku]),g=skus.get(key)||{storeName:d.storeName,sku:d.sku,sales:0,net:0,cost:0,margin:0,difference:0,qty:0,missing:0};g.sales+=d.sales;g.net+=d.net;g.qty+=d.qty;if(d.cost===null)g.missing++;else{g.cost+=d.cost;g.margin+=d.margin;g.difference+=d.difference;}skus.set(key,g);}
+ return {details,skus:[...skus.values()].map(g=>({...g,rate:!g.missing&&g.cost>0?g.margin/g.cost*100:null})),matched:details.filter(d=>d.cost!==null).length,missing:details.filter(d=>d.cost===null).length};
+}
+root.compareJumiaReports=compareJumiaReports;
+root.analyzeJumiaTransactions=analyzeJumiaTransactions;if(typeof module!=='undefined'&&module.exports)module.exports={parseJumiaCSV,analyzeJumiaTransactions,compareJumiaReports};
 })(globalThis);

@@ -8,3 +8,14 @@ test('CSV parser handles quotes, money and state; imports persist and reject dup
  const db=new DatabaseSync(':memory:');db.exec('CREATE TABLE records(id INTEGER PRIMARY KEY,kind TEXT,data TEXT)');setupRecordAudit(db);const list=kind=>db.prepare('SELECT id,data FROM records WHERE kind=?').all(kind).map(r=>({...JSON.parse(r.data),id:r.id}));const save=(kind,data,id)=>{if(id){db.prepare('UPDATE records SET data=? WHERE id=?').run(JSON.stringify(data),id);return id;}return Number(db.prepare('INSERT INTO records(kind,data) VALUES(?,?)').run(kind,JSON.stringify(data)).lastInsertRowid);};const user={role:'admin',name:'Admin'},run=(kind,body)=>handleJumia({db,kind,body,user,list,save});
  const storeId=run('jumiaStores',{name:'Shop'}).id;run('jumiaReports',{storeId,csv,fileName:'report.csv'});assert.equal(list('jumiaReports')[0].transactions.length,3);assert.throws(()=>run('jumiaReports',{storeId,csv}),/déjà importées/);assert.equal(list('jumiaReports').length,1);const store2=run('jumiaStores',{name:'Other'}).id;run('jumiaReports',{storeId:store2,csv});assert.equal(list('jumiaReports').length,2);db.close();
 });
+test('CSV comparison uses store/order/SKU and purchase snapshots; counts units once across transactions and reports',()=>{
+ const {compareJumiaReports}=require('../public/jumia-import');const base=parseJumiaCSV(csv);const reports=[{storeId:1,storeName:'Shop',transactions:base}],orders=[{storeId:1,number:'ORDER',lines:[{sku:'SKU',qty:2,purchasePrice:40,salePrice:105}]}];
+ let c=compareJumiaReports(reports,orders);assert.equal(c.details[0].qty,1);assert.equal(c.details[0].cost,4000);assert.equal(c.details[0].margin,3900);assert.equal(c.details[0].difference,-500);assert.equal(c.skus[0].rate,97.5);
+ reports.push({storeId:1,storeName:'Shop',transactions:base.map(t=>({...t,'Transaction Number':t['Transaction Number']+'NEXT','Order Item No.':'ITEM2'}))});c=compareJumiaReports(reports,orders);assert.equal(c.details[0].qty,2);assert.equal(c.skus[0].cost,8000);assert.equal(c.skus[0].margin,7800);
+ c=compareJumiaReports(reports,[{...orders[0],storeId:2}]);assert.equal(c.details[0].status,'Commande non saisie');assert.equal(c.skus[0].rate,null);assert.equal(c.skus[0].missing,1);
+ c=compareJumiaReports(reports,[{...orders[0],lines:[{...orders[0].lines[0],qty:1}]}]);assert.equal(c.details[0].cost,null);
+ c=compareJumiaReports(reports,[{...orders[0],lines:[{...orders[0].lines[0],sku:'OTHER'}]}]);assert.equal(c.details[0].status,'SKU absent de la commande');
+ c=compareJumiaReports(reports,[{...orders[0],active:false}]);assert.equal(c.details[0].cost,null);
+ const feeOnly=[{storeId:1,transactions:[base[1]]}];assert.equal(compareJumiaReports(feeOnly,orders).details[0].cost,null);
+ const other={storeId:2,storeName:'Other',transactions:base};c=compareJumiaReports([...reports,other],orders);assert.equal(c.skus.length,2);assert.equal(c.skus[0].missing,0);assert.equal(c.skus[1].missing,1);
+});
