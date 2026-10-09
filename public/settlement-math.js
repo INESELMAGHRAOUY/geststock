@@ -4,7 +4,7 @@
  function billBalances(state,side,excludeId){return tradeBills(state,side).map(b=>{
  let paidCents=0,pendingCents=0;for(const p of state.settlements||[])if(p.id!==excludeId&&p.active!==false&&p.side===side)for(const a of p.allocations)if(a.billId===b.id){if(p.status==='pending')pendingCents+=a.amountCents;else paidCents+=a.amountCents;}
  return {...b,paidCents,pendingCents,remainingCents:b.totalCents-paidCents,availableCents:b.totalCents-paidCents-pendingCents};});}
- function tradeSummary(state){const suppliers=billBalances(state,'supplier'),clients=billBalances(state,'client');const payable=suppliers.reduce((s,b)=>s+b.remainingCents,0),receivable=clients.reduce((s,b)=>s+b.remainingCents,0);return {payable,receivable,net:receivable-payable};}
+ function tradeSummary(state){const suppliers=billBalances(state,'supplier'),clients=billBalances(state,'client');const payable=suppliers.reduce((s,b)=>s+b.remainingCents,0),receivable=clients.reduce((s,b)=>s+b.remainingCents,0);return {payable,receivable,net:receivable-payable,purchases:suppliers.reduce((s,b)=>s+b.totalCents,0),supplierPaid:suppliers.reduce((s,b)=>s+b.paidCents,0),sales:clients.reduce((s,b)=>s+b.totalCents,0),clientPaid:clients.reduce((s,b)=>s+b.paidCents,0)};}
  function validateAllocation(state,side,allocations,excludeId,partyId){const balances=billBalances(state,side,excludeId);for(const a of allocations){const bill=balances.find(b=>b.id===a.billId);if(!bill||(partyId!==undefined&&bill.partyId!==partyId)||a.amountCents>bill.availableCents)throw Error('Un bon a changé ou le règlement dépasse son solde');}}
  function treasuryBalances(state){
  const accounts=[{id:0,name:'Caisse / espèces'},...(state.banks||[]).map(b=>({id:b.id,name:b.name}))];
