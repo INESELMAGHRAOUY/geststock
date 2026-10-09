@@ -10,11 +10,11 @@ test('devis, facture, stock insuffisant, réception et persistance',async()=>{
  assert.equal((await request('movements',{productId:p,qty:4,reference:'REC-1'})).status,200);assert.equal((await request('state')).data.products[0].stock,7);
  assert.equal((await request('cheques',{beneficiary:'Fournisseur',amount:120,words:'Texte incorrect',city:'Autre ville'})).status,200);
  const chequePrint=(await request('state')).data.cheques[0];assert.equal(chequePrint.words,'Cent vingt dirhams');assert.equal(chequePrint.city,'Rabat');
- const productUpdate={id:p,name:'Article modifié',sku:'NEW',price:150,stock:8,min:3,expectedStock:7};
+ const productUpdate={id:p,name:'Article modifié',sku:'NEW',price:150,stock:7,min:3,expectedStock:7};
  assert.equal((await request('products',productUpdate)).status,200);
  assert.equal((await request('products',{...productUpdate,stock:9})).status,400);
  assert.equal((await request('products',{...productUpdate,id:99999})).status,400);
- s=(await request('state')).data;assert.equal(s.products.length,1);assert.equal(s.products[0].price,150);assert.equal(s.products[0].stock,8);assert.equal(s.documents[0].lines[0].price,100);assert.equal(s.documents[0].lines[0].name,'Article');
+ s=(await request('state')).data;assert.equal(s.products.length,1);assert.equal(s.products[0].price,150);assert.equal(s.products[0].stock,7);assert.equal(s.documents[0].lines[0].price,100);assert.equal(s.documents[0].lines[0].name,'Article');
  assert.equal((await request('products',{...productUpdate,expectedStock:8,price:-1})).status,400);
  const updated={id:c,name:'Client modifié',phone:'0600000000',email:'client@example.com',address:'Rabat',ice:'123'};
  assert.equal((await request('clients',updated)).status,200);
@@ -84,6 +84,6 @@ test('devis, facture, stock insuffisant, réception et persistance',async()=>{
  assert.equal((await request('recurringCharges',{...periodic,amount:199,active:false,supplierId:supplier})).status,200);
  let changed=(await request('state')).data.recurringCharges.find(x=>x.id===periodic.id);assert.equal(changed.amount,199);assert.equal(changed.active,false);assert.equal(changed.supplierId,supplier);
  assert.equal((await request('recurringCharges',{...changed,amount:0})).status,400);
- await new Promise(resolve=>{child.once('exit',resolve);child.kill();});await start();assert.equal((await request('state')).data.products[0].stock,8);assert.equal((await request('state')).data.clients[0].name,'Client modifié');assert.equal((await request('state')).data.expensePayments.length,3);assert.equal((await request('state')).data.recurringCharges.find(x=>x.label==='WIFI').active,false);assert.equal((await fetch('http://127.0.0.1:3099/api/attachments/'+paidRecord.attachment.id)).status,200);assert.equal((await request('state')).data.expenseLifecycleHistory.length,2);
+ await new Promise(resolve=>{child.once('exit',resolve);child.kill();});await start();assert.equal((await request('state')).data.products[0].stock,7);assert.equal((await request('state')).data.clients[0].name,'Client modifié');assert.equal((await request('state')).data.expensePayments.length,3);assert.equal((await request('state')).data.recurringCharges.find(x=>x.label==='WIFI').active,false);assert.equal((await fetch('http://127.0.0.1:3099/api/attachments/'+paidRecord.attachment.id)).status,200);assert.equal((await request('state')).data.expenseLifecycleHistory.length,2);
  }finally{if(child&&!child.killed)await new Promise(resolve=>{child.once('exit',resolve);child.kill();});fs.rmSync(dir,{recursive:true,force:true});}
 });

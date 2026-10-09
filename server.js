@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {DatabaseSync, backup} = require('node:sqlite');
 const crypto = require('node:crypto');
+const {stockBreakdown,initializeStock}=require('./stock');
 const {setupRecordAudit,auditRecord,handleRecordAdmin}=require('./record-admin');
 const {amountToWords}=require('./public/amount-words');
 const {setupRecurring,syncRecurring}=require('./recurring');
@@ -43,6 +44,7 @@ setInterval(()=>{try{syncRecurring(db);}catch(e){console.error('Charges périodi
 db.exec('CREATE TABLE IF NOT EXISTS payment_attachments(id INTEGER PRIMARY KEY,name TEXT NOT NULL,mime TEXT NOT NULL,content BLOB NOT NULL)');
 db.exec('CREATE TABLE IF NOT EXISTS expense_lifecycle_history(id INTEGER PRIMARY KEY,expense_id INTEGER NOT NULL,action TEXT NOT NULL,reason TEXT NOT NULL,actor TEXT NOT NULL,at TEXT NOT NULL,snapshot TEXT NOT NULL)');
 setupRecordAudit(db);
+initializeStock(db);
 const backupDir = process.env.BACKUP_DIR || path.join(path.dirname(databasePath), 'backups');
 let backingUp = false;
 async function dailyBackup() {
@@ -65,7 +67,8 @@ async function dailyBackup() {
 }
 initialization.then(dailyBackup).catch(()=>{});
 setInterval(dailyBackup,60*60*1000).unref();
-const list = kind => db.prepare('SELECT id,data FROM records WHERE kind=? ORDER BY id DESC').all(kind).map(r=>({ ...JSON.parse(r.data),id:r.id}));
+const rawList = kind => db.prepare('SELECT id,data FROM records WHERE kind=? ORDER BY id DESC').all(kind).map(r=>({ ...JSON.parse(r.data),id:r.id}));
+const list=kind=>kind==='products'?rawList(kind).map(p=>stockBreakdown(p,rawList('movements'),rawList('documents'))):rawList(kind);
 const kinds = ['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments','banks'];
 function save(kind,data,id){if(id) db.prepare('UPDATE records SET data=? WHERE id=? AND kind=?').run(JSON.stringify(data),id,kind);else id=Number(db.prepare('INSERT INTO records(kind,data) VALUES(?,?)').run(kind,JSON.stringify(data)).lastInsertRowid);return id;}
 if(!db.prepare("SELECT value FROM app_metadata WHERE key='banks-defaults-v1'").get()){
@@ -264,8 +267,10 @@ const server=http.createServer(async(req,res)=>{
  if(body.id!==undefined){
  const existing=Number.isSafeInteger(body.id)?list('products').find(p=>p.id===body.id):null;
  if(!existing)throw Error('Produit introuvable');
+ if(body.stock!==existing.stock)throw Error('Le stock est calculé automatiquement à partir des achats et ventes');
  if(body.expectedStock!==existing.stock)throw Error('Le stock a changé. Rouvrez le produit avant de modifier.');
  }
+ if(body.id===undefined)body.initialStock=body.stock;else{delete body.initialStock;delete body.purchased;delete body.sold;}
  delete body.expectedStock;body.name=body.name.trim();
  }
  if(['clients','suppliers'].includes(kind)){
