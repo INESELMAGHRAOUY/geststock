@@ -2,7 +2,7 @@ const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value
 function setupRecordAudit(db){db.exec('CREATE TABLE IF NOT EXISTS record_audit(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,record_id INTEGER NOT NULL,action TEXT NOT NULL,actor TEXT NOT NULL,at TEXT NOT NULL,reason TEXT NOT NULL,before_data TEXT NOT NULL,after_data TEXT NOT NULL)');}
 function auditRecord(db,kind,before,after,user,action,reason){db.prepare('INSERT INTO record_audit(kind,record_id,action,actor,at,reason,before_data,after_data) VALUES(?,?,?,?,?,?,?,?)').run(kind,before.id,action,user.name,new Date().toISOString(),reason||'',JSON.stringify(before),JSON.stringify(after));}
 function handleRecordAdmin({db,body,user,list,save}){
- const allowed=['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments','banks'];
+ const allowed=['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments','banks','inventories'];
  if(!allowed.includes(body.kind)||!Number.isSafeInteger(body.id)||!['modify','setActive'].includes(body.action))throw Error('Opération invalide');
  if(typeof body.reason!=='string'||!body.reason.trim()||body.reason.length>1000)throw Error('Motif obligatoire');
  db.exec('BEGIN IMMEDIATE');try{
@@ -26,8 +26,12 @@ function handleRecordAdmin({db,body,user,list,save}){
  Object.assign(updated,{lines,tax:data.tax,clientId:client?.id||null,clientName:client?.name||'Client comptoir',total:lines.reduce((s,l)=>s+l.qty*l.price,0)*(1+data.tax/100)});
  }else if(kind==='movements'){
  const product=list('products').find(p=>p.id===data.productId);if(!product||!Number.isFinite(data.qty)||data.qty<=0)throw Error('Réception invalide');
+ if(data.unitPrice!==undefined&&(!Number.isFinite(data.unitPrice)||data.unitPrice<0))throw Error('Prix achat invalide');
  const supplier=data.supplierId?list('suppliers').find(x=>x.id===data.supplierId):null;if(data.supplierId&&!supplier)throw Error('Fournisseur introuvable');
- Object.assign(updated,{productId:product.id,name:product.name,qty:data.qty,supplierId:supplier?.id||null,reference:String(data.reference||'')});
+ Object.assign(updated,{unitPrice:data.unitPrice??old.unitPrice,productId:product.id,name:product.name,qty:data.qty,supplierId:supplier?.id||null,reference:String(data.reference||''),supplierName:supplier?.name||''});
+ }else if(kind==='inventories'){
+ const product=list('products').find(p=>p.id===old.productId);if(!product||!Number.isFinite(data.counted)||data.counted<0)throw Error('Quantité comptée invalide');
+ const delta=data.counted-old.previousStock;Object.assign(updated,{counted:data.counted,delta});
  }else if(kind==='cheques'){
  if(typeof data.beneficiary!=='string'||!data.beneficiary.trim()||!Number.isFinite(data.amount)||data.amount<=0||!validDate(data.date))throw Error('Chèque invalide');
  Object.assign(updated,{beneficiary:data.beneficiary.trim(),amount:data.amount,date:data.date,reference:String(data.reference||''),city:'Rabat',words:require('./public/amount-words').amountToWords(data.amount)});
@@ -40,7 +44,8 @@ function handleRecordAdmin({db,body,user,list,save}){
  const stockEffects=record=>{
  if(record.active===false)return [];
  if(kind==='documents'&&record.type==='Facture')return record.lines.map(l=>[l.productId,-l.qty]);
- if(kind==='movements')return [[record.productId,record.qty]];
+ if(kind==='movements'&&record.status!=='pending')return [[record.productId,record.qty]];
+ if(kind==='inventories')return [[record.productId,record.delta]];
  return [];
  };
  const differences=new Map();for(const [id,q] of stockEffects(old))differences.set(id,(differences.get(id)||0)-q);for(const [id,q] of stockEffects(updated))differences.set(id,(differences.get(id)||0)+q);

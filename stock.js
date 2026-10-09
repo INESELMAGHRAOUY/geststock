@@ -1,8 +1,9 @@
-function stockBreakdown(product,movements,documents){
- const purchased=movements.filter(m=>m.active!==false&&m.productId===product.id).reduce((sum,m)=>sum+m.qty,0);
+function stockBreakdown(product,movements,documents,inventories=[]){
+ const purchased=movements.filter(m=>m.active!==false&&m.status!=='pending'&&m.productId===product.id).reduce((sum,m)=>sum+m.qty,0);
  const sold=documents.filter(d=>d.active!==false&&d.type==='Facture').reduce((sum,d)=>sum+d.lines.filter(l=>l.productId===product.id).reduce((n,l)=>n+l.qty,0),0);
- const initialStock=product.initialStock??product.stock-purchased+sold;
- return {...product,initialStock,purchased,sold,stock:initialStock+purchased-sold};
+ const adjustment=inventories.filter(i=>i.active!==false&&i.productId===product.id).reduce((sum,i)=>sum+i.delta,0);
+ const initialStock=product.initialStock??product.stock-purchased+sold-adjustment;
+ return {...product,initialStock,purchased,sold,adjustment,stock:initialStock+purchased-sold+adjustment};
 }
 function initializeStock(db){
  const rows=kind=>db.prepare('SELECT id,data FROM records WHERE kind=?').all(kind).map(r=>({...JSON.parse(r.data),id:r.id}));

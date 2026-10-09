@@ -7,7 +7,8 @@ function adminRecordActions(kind,id,edit=true){
 function adminSelect(name,label,kind,value){return `<label>${label}<select name="${name}"><option value="">Facultatif</option>${state[kind].filter(x=>x.active!==false||x.id===value).map(x=>`<option value="${x.id}" ${x.id===value?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>`;}
 function adminEditorFields(kind,r){
  if(kind==='expenses')return field('label','Libellé','text',r.label)+field('category','Catégorie','text',r.category)+field('amount','Montant','number',r.amount)+field('date','Date','date',r.date)+adminSelect('supplierId','Fournisseur','suppliers',r.supplierId)+field('reference','Référence','text',r.reference)+field('notes','Notes','text',r.notes);
- if(kind==='movements')return adminSelect('productId','Produit','products',r.productId)+field('qty','Quantité','number',r.qty)+adminSelect('supplierId','Fournisseur','suppliers',r.supplierId)+field('reference','Référence','text',r.reference);
+ if(kind==='movements')return adminSelect('productId','Produit','products',r.productId)+field('qty','Quantité','number',r.qty)+field('unitPrice','Prix achat HT','number',r.unitPrice??0)+adminSelect('supplierId','Fournisseur','suppliers',r.supplierId)+field('reference','Référence','text',r.reference);
+ if(kind==='inventories')return field('counted','Quantité comptée','number',r.counted);
  if(kind==='cheques')return field('beneficiary','Bénéficiaire','text',r.beneficiary)+field('amount','Montant','number',r.amount)+field('date','Date','date',r.date)+field('reference','Référence','text',r.reference);
  if(kind==='documents')return adminSelect('clientId','Client','clients',r.clientId)+field('tax','TVA (%)','number',r.tax)+`<div id="admin-document-lines" style="width:100%">${adminDocumentLines(r.lines)}</div><button type="button" id="admin-add-line" class="secondary">Ajouter une ligne</button>`;
  return '';
@@ -31,7 +32,7 @@ document.addEventListener('submit',async e=>{
  if(e.target.id!=='admin-record-form')return;e.preventDefault();e.stopImmediatePropagation();const button=e.target.querySelector('button');button.disabled=true;
  try{
  const edit=adminRecordEdit,data=Object.fromEntries(new FormData(e.target));
- for(const key of ['amount','productId','supplierId','qty','tax','clientId'])if(key in data)data[key]=Number(data[key]);
+ for(const key of ['amount','productId','supplierId','qty','tax','clientId','counted','unitPrice'])if(key in data)data[key]=Number(data[key]);
  if(edit.kind==='documents'&&edit.action==='modify')data.lines=captureAdminLines();
  await api('adminRecords',{kind:edit.kind,id:edit.record.id,action:edit.action,active:edit.record.active===false,expectedRecord:JSON.stringify(edit.record),reason:data.reason,data});document.querySelector('#admin-record-dialog').close();adminRecordEdit=null;await load();
  }catch(error){$('#notice').textContent=error.message;const p=e.target.parentNode.querySelector('.admin-record-error')||document.createElement('p');p.className='admin-record-error';p.textContent=error.message;e.target.parentNode.append(p);}finally{button.disabled=false;}

@@ -68,8 +68,8 @@ async function dailyBackup() {
 initialization.then(dailyBackup).catch(()=>{});
 setInterval(dailyBackup,60*60*1000).unref();
 const rawList = kind => db.prepare('SELECT id,data FROM records WHERE kind=? ORDER BY id DESC').all(kind).map(r=>({ ...JSON.parse(r.data),id:r.id}));
-const list=kind=>kind==='products'?rawList(kind).map(p=>stockBreakdown(p,rawList('movements'),rawList('documents'))):rawList(kind);
-const kinds = ['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments','banks'];
+const list=kind=>kind==='products'?rawList(kind).map(p=>stockBreakdown(p,rawList('movements'),rawList('documents'),rawList('inventories'))):rawList(kind);
+const kinds = ['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments','banks','inventories'];
 function save(kind,data,id){if(id) db.prepare('UPDATE records SET data=? WHERE id=? AND kind=?').run(JSON.stringify(data),id,kind);else id=Number(db.prepare('INSERT INTO records(kind,data) VALUES(?,?)').run(kind,JSON.stringify(data)).lastInsertRowid);return id;}
 if(!db.prepare("SELECT value FROM app_metadata WHERE key='banks-defaults-v1'").get()){
  db.exec('BEGIN IMMEDIATE');try{
@@ -288,10 +288,28 @@ const server=http.createServer(async(req,res)=>{
  if(body.type==='Facture')for(const [id,qty] of quantities){const p=list('products').find(p=>p.id===id);if(p.stock<qty)throw Error('Stock insuffisant : '+p.name);save('products',{...p,stock:p.stock-qty},id);}
  body.clientName=list('clients').find(c=>c.id===body.clientId)?.name||'Client comptoir';body.date=new Date().toISOString();body.number=(body.type==='Facture'?'FAC':'DEV')+'-'+String(list('documents').length+1).padStart(5,'0');body.total=body.lines.reduce((s,l)=>s+l.qty*l.price,0)*(1+body.tax/100);const id=save(kind,body);db.exec('COMMIT');return res.end(JSON.stringify({id}));
  }catch(e){db.exec('ROLLBACK');throw e;}}
+ if(kind==='inventories'){
+ if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Inventaire réservé aux administrateurs'}));}
+ if(body.id!==undefined)throw Error('Utilisez Modifier');
+ const product=list('products').find(p=>p.id===body.productId&&p.active!==false);
+ if(!product||!Number.isFinite(body.counted)||body.counted<0||typeof body.reason!=='string'||!body.reason.trim())throw Error('Article, quantité comptée et motif obligatoires');
+ if(body.expectedStock!==product.stock)throw Error('Le stock a changé. Rechargez avant de valider l’inventaire');
+ const id=save(kind,{productId:product.id,name:product.name,counted:body.counted,previousStock:product.stock,delta:body.counted-product.stock,reason:body.reason.trim(),date:new Date().toISOString(),createdBy:currentUser.name,active:true});return res.end(JSON.stringify({id}));
+ }
  if(kind==='movements'){
- if(body.id!==undefined)throw Error('Utilisez le formulaire de modification administrateur');
+ if(body.id!==undefined){
+ if(body.action!=='receive')throw Error('Utilisez le formulaire de modification administrateur');
+ const old=list('movements').find(m=>m.id===body.id);if(!old||old.active===false||old.status!=='pending')throw Error('Achat en instance introuvable');
+ if(JSON.stringify(old)!==body.expectedRecord)throw Error('Cette opération a changé. Rechargez la page');
+ const updated={...old,status:'received',receivedAt:new Date().toISOString(),receivedBy:currentUser.name};
+ db.exec('BEGIN IMMEDIATE');try{save(kind,updated,old.id);auditRecord(db,kind,old,updated,currentUser,'Réception','Achat reçu');db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}return res.end('{}');
+ }
+ if(body.status!==undefined&&!['pending','received'].includes(body.status))throw Error('État de réception invalide');
+ if(body.unitPrice!==undefined&&(!Number.isFinite(body.unitPrice)||body.unitPrice<0))throw Error('Prix achat invalide');
+ const supplier=body.supplierId?list('suppliers').find(s=>s.id===body.supplierId&&s.active!==false):null;if(body.supplierId&&!supplier)throw Error('Fournisseur introuvable');
+ body.status=body.status||'received';body.supplierName=supplier?.name||'';
  const p=list('products').find(p=>p.id===body.productId);if(!p||p.active===false||!Number.isFinite(body.qty)||body.qty<=0)throw Error('Entrée invalide');
- db.exec('BEGIN');try{save('products',{...p,stock:p.stock+body.qty},p.id);save(kind,{...body,active:true,name:p.name,date:new Date().toISOString()});db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}return res.end('{}');}
+ db.exec('BEGIN');try{const id=save(kind,{...body,active:true,name:p.name,date:new Date().toISOString()});db.exec('COMMIT');return res.end(JSON.stringify({id}));}catch(e){db.exec('ROLLBACK');throw e;}}
  if(kind==='cheques'){
  if(!body.beneficiary?.trim()||!Number.isFinite(body.amount)||body.amount<=0)throw Error('Chèque invalide');
  const currency=JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data||'{}').currency||'MAD';

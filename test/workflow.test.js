@@ -84,6 +84,15 @@ test('devis, facture, stock insuffisant, réception et persistance',async()=>{
  assert.equal((await request('recurringCharges',{...periodic,amount:199,active:false,supplierId:supplier})).status,200);
  let changed=(await request('state')).data.recurringCharges.find(x=>x.id===periodic.id);assert.equal(changed.amount,199);assert.equal(changed.active,false);assert.equal(changed.supplierId,supplier);
  assert.equal((await request('recurringCharges',{...changed,amount:0})).status,400);
+
+ const pendingId=(await request('movements',{productId:p,supplierId:supplier,qty:10,unitPrice:25,status:'pending',reference:'ACH-PENDING'})).data.id;
+ let current=(await request('state')).data;assert.equal(current.products[0].stock,7);let pending=current.movements.find(m=>m.id===pendingId);
+ assert.equal((await request('movements',{id:pendingId,action:'receive',expectedRecord:JSON.stringify(pending)})).status,200);current=(await request('state')).data;assert.equal(current.products[0].stock,17);
+ assert.equal((await request('movements',{id:pendingId,action:'receive',expectedRecord:JSON.stringify(pending)})).status,400);
+ assert.equal((await request('inventories',{productId:p,counted:15,expectedStock:7,reason:'Comptage'})).status,400);
+ const inventoryId=(await request('inventories',{productId:p,counted:15,expectedStock:17,reason:'Comptage'})).data.id;current=(await request('state')).data;assert.equal(current.products[0].stock,15);assert.equal(current.products[0].adjustment,-2);
+ const inventory=current.inventories.find(i=>i.id===inventoryId);assert.equal((await request('adminRecords',{kind:'inventories',id:inventoryId,action:'setActive',active:false,expectedRecord:JSON.stringify(inventory),reason:'Correction'})).status,200);current=(await request('state')).data;assert.equal(current.products[0].stock,17);
+ pending=current.movements.find(m=>m.id===pendingId);assert.equal((await request('adminRecords',{kind:'movements',id:pendingId,action:'setActive',active:false,expectedRecord:JSON.stringify(pending),reason:'Achat annulé'})).status,200);assert.equal((await request('state')).data.products[0].stock,7);
  await new Promise(resolve=>{child.once('exit',resolve);child.kill();});await start();assert.equal((await request('state')).data.products[0].stock,7);assert.equal((await request('state')).data.clients[0].name,'Client modifié');assert.equal((await request('state')).data.expensePayments.length,3);assert.equal((await request('state')).data.recurringCharges.find(x=>x.label==='WIFI').active,false);assert.equal((await fetch('http://127.0.0.1:3099/api/attachments/'+paidRecord.attachment.id)).status,200);assert.equal((await request('state')).data.expenseLifecycleHistory.length,2);
  }finally{if(child&&!child.killed)await new Promise(resolve=>{child.once('exit',resolve);child.kill();});fs.rmSync(dir,{recursive:true,force:true});}
 });
