@@ -12,7 +12,7 @@ function handleJumia({db,body,user,list,save,kind}){
  updated={...old,lines:old.lines.map(l=>l.status==='En attente'?{...l,status:'Prêt à expédier'}:l)};
  }else if(body.action==='ship'){
  if(kind!=='jumiaOrders'||!old||old.active===false||!old.lines.some(l=>l.status==='Prêt à expédier'))throw Error('Aucune ligne prête à expédier');
- updated={...old,lines:old.lines.map(l=>l.status==='Prêt à expédier'?{...l,status:'Expédié',dispatched:true,returnedToStock:false}:l)};
+ updated={...old,lines:old.lines.map(l=>l.status==='Prêt à expédier'?{...l,status:'Expédié',dispatched:true,returnedToStock:false,purchasePrice:list('products').find(p=>p.id===l.productId)?.lastPurchasePrice??l.purchasePrice,purchaseSourceId:list('products').find(p=>p.id===l.productId)?.purchaseSourceId??l.purchaseSourceId??null}:l)};
  }else if(body.action==='setActive'){
  if(!old||typeof body.active!=='boolean'||body.active===(old.active!==false))throw Error('État invalide');updated={...old,active:body.active};
  }else if(kind==='jumiaHubs'){
@@ -35,13 +35,13 @@ function handleJumia({db,body,user,list,save,kind}){
  const prior=old?.lines.find(p=>p.lineId===l.lineId);const product=l.productId?list('products').find(p=>p.id===l.productId):null;
  if(!product||product.active===false)throw Error('Enregistrez cet article et son achat dans le stock avant la commande Jumia');
  const name=String(l.name||product?.name||'').trim();if(!name||!Number.isSafeInteger(l.qty)||l.qty<=0||!jumiaStatuses.includes(l.status))throw Error('Produit, quantité ou statut invalide');
- const percent=l.commissionPercent??store.commissionPercent;if(!Number.isFinite(percent)||percent<0||percent>100)throw Error('Commission invalide');
+ const percent=l.commissionPercent??prior?.commissionPercent??product.jumiaCommissionPercent??store.commissionPercent;if(!Number.isFinite(percent)||percent<0||percent>100)throw Error('Commission invalide');
  if(l.supplierId&&!list('suppliers').some(s=>s.id===l.supplierId))throw Error('Fournisseur introuvable');
  const lineId=prior?.lineId||crypto.randomUUID();if(seen.has(lineId))throw Error('Ligne dupliquée');seen.add(lineId);
  const dispatched=!!prior?.dispatched||['Expédié','Livré','La livraison a échoué','Retourné'].includes(l.status);
  if(l.returnedToStock&&(!dispatched||l.status==='Livré'))throw Error('Le retour physique au stock ne concerne pas un article livré');
  if(l.lost&&l.returnedToStock)throw Error('Un article perdu ne peut pas être remis en stock');
- return {lineId,productId:product?.id||null,name,sku:String(product.sku||''),jumiaSku:String(l.jumiaSku||''),supplierId:l.supplierId||null,qty:l.qty,purchasePrice:money(l.purchasePrice,'Prix achat'),salePrice:money(l.salePrice,'Prix vente'),status:l.status,fromStock:true,dispatched,returnedToStock:!!l.returnedToStock,lost:!!l.lost,commissionPercent:percent,commissionActual:money(l.commissionActual,'Commission prélevée',true),shippingContribution:money(l.shippingContribution??0,'Contribution livraison'),otherFees:money(l.otherFees??0,'Autres frais'),refundCredit:money(l.refundCredit??0,'Remboursement Jumia')};
+ return {lineId,productId:product?.id||null,name,sku:String(product.sku||''),jumiaSku:String(l.jumiaSku||''),supplierId:l.supplierId||null,qty:l.qty,purchasePrice:money(prior?.dispatched&&prior.productId===product.id?prior.purchasePrice:(product.lastPurchasePrice??product.purchasePrice??0),'Prix achat'),purchaseSourceId:prior?.dispatched&&prior.productId===product.id?prior.purchaseSourceId??null:product.purchaseSourceId??null,salePrice:money(l.salePrice,'Prix vente'),status:l.status,fromStock:true,dispatched,returnedToStock:!!l.returnedToStock,lost:!!l.lost,commissionPercent:percent,commissionActual:money(l.commissionActual,'Commission prélevée',true),shippingContribution:money(l.shippingContribution??0,'Contribution livraison'),otherFees:money(l.otherFees??0,'Autres frais'),refundCredit:money(l.refundCredit??0,'Remboursement Jumia')};
  });
  const hub=body.hubId?list('jumiaHubs').find(h=>h.id===body.hubId&&(h.active!==false||h.id===old?.hubId)):null;if(body.hubId&&!hub)throw Error('Hub indisponible');
  const costs={};for(const key of ['supplierTransport','hubTransport','ticketUnitPrice','saltUnitPrice','cartonUnitPrice','other'])costs[key]=money(body.costs?.[key]??0,key);
