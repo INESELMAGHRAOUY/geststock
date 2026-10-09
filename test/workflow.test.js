@@ -110,5 +110,10 @@ test('devis, facture, stock insuffisant, réception et persistance',async()=>{
  assert.equal((await request('settlements',groupedPayment)).status,200);assert.equal((await request('settlements',groupedPayment)).status,400);
  assert.equal((await request('accountOpenings',{bankId:0,amount:1000,date:'2026-10-01',reason:'Départ caisse'})).status,200);assert.equal((await request('state')).data.accountOpenings[0].amountCents,100000);
  assert.equal((await fetch('http://127.0.0.1:3099/settlement-math.js')).status,200);assert.equal((await fetch('http://127.0.0.1:3099/settlements.js')).status,200);
+
+ const jumiaStore=(await request('jumiaStores',{name:'INOM COLLECTIONS',commissionPercent:10})).data.id;
+ const jumiaOrder={storeId:jumiaStore,number:'378395468',date:'2026-10-08',lines:[{productId:p,name:'Article',qty:1,purchasePrice:60,salePrice:199,status:'En attente',commissionPercent:10}]};
+ assert.equal((await request('jumiaOrders',jumiaOrder)).status,200);const js=(await request('state')).data;assert.equal(js.jumiaStores.length,1);assert.equal(js.jumiaOrders[0].lines[0].fromStock,true);
+ assert.equal((await fetch('http://127.0.0.1:3099/jumia.js')).status,200);assert.equal((await fetch('http://127.0.0.1:3099/jumia-math.js')).status,200);
  }finally{if(child&&!child.killed)await new Promise(resolve=>{child.once('exit',resolve);child.kill();});fs.rmSync(dir,{recursive:true,force:true});}
 });

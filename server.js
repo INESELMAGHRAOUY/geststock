@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {DatabaseSync, backup} = require('node:sqlite');
 const crypto = require('node:crypto');
+const {handleJumia}=require('./jumia');
 const {handleSettlement}=require('./settlements');
 const {purchaseLines}=require('./purchase');
 const {stockBreakdown,initializeStock}=require('./stock');
@@ -70,8 +71,8 @@ async function dailyBackup() {
 initialization.then(dailyBackup).catch(()=>{});
 setInterval(dailyBackup,60*60*1000).unref();
 const rawList = kind => db.prepare('SELECT id,data FROM records WHERE kind=? ORDER BY id DESC').all(kind).map(r=>({ ...JSON.parse(r.data),id:r.id}));
-const list=kind=>kind==='products'?rawList(kind).map(p=>stockBreakdown(p,rawList('movements'),rawList('documents'),rawList('inventories'))):rawList(kind);
-const kinds = ['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments','banks','inventories','settlements','accountOpenings'];
+const list=kind=>{const records=rawList(kind);if(kind!=='products')return records;const movements=rawList('movements'),documents=rawList('documents'),inventories=rawList('inventories'),orders=rawList('jumiaOrders');return records.map(p=>stockBreakdown(p,movements,documents,inventories,orders));};
+const kinds = ['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments','banks','inventories','settlements','accountOpenings','jumiaStores','jumiaOrders'];
 function save(kind,data,id){if(id) db.prepare('UPDATE records SET data=? WHERE id=? AND kind=?').run(JSON.stringify(data),id,kind);else id=Number(db.prepare('INSERT INTO records(kind,data) VALUES(?,?)').run(kind,JSON.stringify(data)).lastInsertRowid);return id;}
 if(!db.prepare("SELECT value FROM app_metadata WHERE key='banks-defaults-v1'").get()){
  db.exec('BEGIN IMMEDIATE');try{
@@ -169,6 +170,7 @@ const server=http.createServer(async(req,res)=>{
  }
  const kind=url.pathname.split('/')[2];if(kind==='settings'){if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(body));return res.end('{}');}
  if(!kinds.includes(kind)&&kind!=='adminRecords')throw Error('Module inconnu');
+ if(['jumiaStores','jumiaOrders'].includes(kind)){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleJumia({db,body,user:currentUser,list,save,kind})));}
  if(kind==='accountOpenings'){
  if(req.method!=='POST'||currentUser.role!=='admin')throw Error('Gestion de trésorerie réservée aux administrateurs');
  if(!Number.isSafeInteger(body.bankId)||body.bankId<0||(body.bankId&&!list('banks').some(b=>b.id===body.bankId)))throw Error('Compte invalide');
@@ -336,7 +338,7 @@ const server=http.createServer(async(req,res)=>{
  }
  return res.end(JSON.stringify({id:save(kind,{...body,active:true})}));
  }
- const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js'].includes(file)){res.writeHead(404);return res.end();}
+ const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js'].includes(file)){res.writeHead(404);return res.end();}
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(path.join(__dirname,'public',file)));
  }catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}
 });
