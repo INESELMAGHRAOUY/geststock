@@ -1,0 +1,22 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const {DatabaseSync}=require('node:sqlite');const {handleSettlement}=require('../settlements');const {setupRecordAudit,handleRecordAdmin}=require('../record-admin');const {billBalances,tradeSummary,treasuryBalances}=require('../public/settlement-math');
+test('grouped supplier/client settlements, partial allocation, pending cheques, cash balances and safe corrections',()=>{
+ const db=new DatabaseSync(':memory:');db.exec('CREATE TABLE records(id INTEGER PRIMARY KEY,kind TEXT,data TEXT)');setupRecordAudit(db);
+ const save=(kind,data,id)=>{if(id){db.prepare('UPDATE records SET data=? WHERE id=?').run(JSON.stringify(data),id);return id;}return Number(db.prepare('INSERT INTO records(kind,data) VALUES(?,?)').run(kind,JSON.stringify(data)).lastInsertRowid);};
+ const list=kind=>db.prepare('SELECT id,data FROM records WHERE kind=? ORDER BY id DESC').all(kind).map(r=>({...JSON.parse(r.data),id:r.id}));
+ const state=()=>Object.fromEntries(['movements','documents','suppliers','clients','settlements','accountOpenings','banks','expensePayments'].map(k=>[k,list(k)]));
+ const supplier=save('suppliers',{name:'Supplier'}),client=save('clients',{name:'Client'}),bank=save('banks',{name:'CDM',active:true});
+ const b1=save('movements',{supplierId:supplier,total:100,status:'received',reference:'BON1'}),b2=save('movements',{supplierId:supplier,total:200,status:'received',reference:'BON2'});save('movements',{supplierId:supplier,total:900,status:'pending'});
+ const invoice=save('documents',{type:'Facture',clientId:client,total:500,number:'FAC1',lines:[]});save('documents',{type:'Devis',clientId:client,total:999});
+ save('accountOpenings',{bankId:0,amountCents:100000,date:'2026-10-01'});save('accountOpenings',{bankId:bank,amountCents:200000,date:'2026-10-01'});
+ const user={role:'admin',name:'Admin'},run=body=>handleSettlement({db,list,save,user,body});
+ const request=(side,partyId,billIds,amount)=>({side,partyId,billIds,amount,date:'2026-10-08',method:'Espèces',expectedBalances:Object.fromEntries(billBalances(state(),side).filter(b=>billIds.includes(b.id)).map(b=>[b.id,b.availableCents]))});
+ const initial=request('supplier',supplier,[b1,b2],150),id=run(initial).id;assert.deepEqual(list('settlements')[0].allocations.map(a=>a.amountCents),[10000,5000]);assert.equal(tradeSummary(state()).payable,15000);assert.equal(treasuryBalances(state())[0].balance,85000);
+ assert.throws(()=>run(initial),/indisponible|solde|changé/);assert.equal(list('settlements').length,1);
+ const pending=run({...request('supplier',supplier,[b2],150),method:'Chèque',bankId:bank,chequeNumber:'123',chequeDueDate:'2026-10-13'}).id;assert.equal(billBalances(state(),'supplier').find(b=>b.id===b2).availableCents,0);assert.equal(tradeSummary(state()).payable,15000);assert.equal(treasuryBalances(state())[1].balance,200000);
+ const cheque=list('settlements').find(p=>p.id===pending);run({id:pending,expectedRecord:JSON.stringify(cheque),action:'validate',clearedDate:'2026-10-08'});assert.equal(tradeSummary(state()).payable,0);assert.equal(treasuryBalances(state())[1].balance,185000);
+ run(request('client',client,[invoice],300));assert.equal(tradeSummary(state()).receivable,20000);assert.equal(treasuryBalances(state())[0].balance,115000);
+ save('expensePayments',{method:'Espèces',date:'2026-10-08',amountCents:10000,status:'validated'});save('expensePayments',{method:'Chèque',bankId:bank,date:'2026-10-08',amountCents:99000,status:'pending'});assert.equal(treasuryBalances(state())[0].balance,105000);
+ const bon=list('movements').find(b=>b.id===b1);assert.throws(()=>handleRecordAdmin({db,list,save,user,body:{kind:'movements',id:b1,action:'setActive',active:false,expectedRecord:JSON.stringify(bon),reason:'Cancel'}}),/règlements liés/);
+ const paid=list('settlements').find(p=>p.id===id);run({id,expectedRecord:JSON.stringify(paid),action:'setActive',active:false,reason:'Correction'});assert.equal(tradeSummary(state()).payable,15000);assert.equal(treasuryBalances(state())[0].balance,120000);
+ const disabled=list('settlements').find(p=>p.id===id);assert.throws(()=>handleSettlement({db,list,save,user:{role:'user',name:'Staff'},body:{id,expectedRecord:JSON.stringify(disabled),action:'setActive',active:true,reason:'Test'}}),/administrateurs/);db.close();
+});

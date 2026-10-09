@@ -36,6 +36,10 @@ function handleRecordAdmin({db,body,user,list,save}){
  Object.assign(updated,{beneficiary:data.beneficiary.trim(),amount:data.amount,date:data.date,reference:String(data.reference||''),city:'Rabat',words:require('./public/amount-words').amountToWords(data.amount)});
  }else throw Error('Utilisez le formulaire Modifier de cet élément');
  }
+ if(['movements','documents'].includes(kind)){
+ const side=kind==='movements'?'supplier':'client';const allocations=list('settlements').filter(p=>p.side===side&&p.active!==false).flatMap(p=>p.allocations).filter(a=>a.billId===old.id);
+ if(allocations.length){if(updated.active===false)throw Error('Désactivez les règlements liés avant de désactiver ce bon');if(allocations.reduce((n,a)=>n+a.amountCents,0)>Math.round((updated.total||0)*100))throw Error('Le total ne peut pas être inférieur aux règlements liés');const key=side==='supplier'?'supplierId':'clientId';if((old[key]||0)!==(updated[key]||0))throw Error('Désactivez les règlements liés avant de changer le tiers');}
+ }
  if(kind==='expensePayments'&&updated.active!==false){
  const expense=list('expenses').find(x=>x.id===updated.expenseId);if(!expense||expense.active===false)throw Error('Réactivez la charge avant son paiement');
  const other=list('expensePayments').filter(p=>p.id!==old.id&&p.expenseId===old.expenseId&&p.active!==false).reduce((s,p)=>s+p.amountCents,0);if(other+old.amountCents>expense.amountCents)throw Error('Le paiement dépasse le reste à payer');

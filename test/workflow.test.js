@@ -104,5 +104,11 @@ test('devis, facture, stock insuffisant, réception et persistance',async()=>{
  assert.equal((await request('movements',{id:multiId,action:'receive',expectedRecord:JSON.stringify(multi)})).status,200);multiState=(await request('state')).data;assert.equal(multiState.products.find(x=>x.id===p).stock,10);assert.equal(multiState.products.find(x=>x.id===p2).stock,2);
  multi=multiState.movements.find(m=>m.id===multiId);assert.equal((await request('adminRecords',{kind:'movements',id:multiId,action:'modify',expectedRecord:JSON.stringify(multi),reason:'Quantité corrigée',data:{supplierId:supplier,reference:bon.reference,lines:[{...bon.lines[0],qty:4},bon.lines[1]]}})).status,200);multiState=(await request('state')).data;assert.equal(multiState.products.find(x=>x.id===p).stock,11);
  multi=multiState.movements.find(m=>m.id===multiId);assert.equal((await request('adminRecords',{kind:'movements',id:multiId,action:'setActive',active:false,expectedRecord:JSON.stringify(multi),reason:'Annulation bon'})).status,200);multiState=(await request('state')).data;assert.equal(multiState.products.find(x=>x.id===p).stock,7);assert.equal(multiState.products.find(x=>x.id===p2).stock,0);
+
+ const payableBill=(await request('movements',{supplierId:supplier,status:'received',lines:[{productId:p,qty:1,unitPrice:20}]})).data.id;
+ const groupedPayment={side:'supplier',partyId:supplier,billIds:[payableBill],amount:20,date:'2026-10-08',method:'Espèces',expectedBalances:{[payableBill]:2000}};
+ assert.equal((await request('settlements',groupedPayment)).status,200);assert.equal((await request('settlements',groupedPayment)).status,400);
+ assert.equal((await request('accountOpenings',{bankId:0,amount:1000,date:'2026-10-01',reason:'Départ caisse'})).status,200);assert.equal((await request('state')).data.accountOpenings[0].amountCents,100000);
+ assert.equal((await fetch('http://127.0.0.1:3099/settlement-math.js')).status,200);assert.equal((await fetch('http://127.0.0.1:3099/settlements.js')).status,200);
  }finally{if(child&&!child.killed)await new Promise(resolve=>{child.once('exit',resolve);child.kill();});fs.rmSync(dir,{recursive:true,force:true});}
 });
