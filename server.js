@@ -72,7 +72,7 @@ initialization.then(dailyBackup).catch(()=>{});
 setInterval(dailyBackup,60*60*1000).unref();
 const rawList = kind => db.prepare('SELECT id,data FROM records WHERE kind=? ORDER BY id DESC').all(kind).map(r=>({ ...JSON.parse(r.data),id:r.id}));
 const list=kind=>{const records=rawList(kind);if(kind!=='products')return records;const movements=rawList('movements'),documents=rawList('documents'),inventories=rawList('inventories'),orders=rawList('jumiaOrders');return records.map(p=>stockBreakdown(p,movements,documents,inventories,orders));};
-const kinds = ['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments','banks','inventories','settlements','accountOpenings','jumiaStores','jumiaOrders','jumiaHubs'];
+const kinds = ['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments','banks','inventories','settlements','accountOpenings','jumiaStores','jumiaOrders','jumiaHubs','jumiaReports'];
 function save(kind,data,id){if(id) db.prepare('UPDATE records SET data=? WHERE id=? AND kind=?').run(JSON.stringify(data),id,kind);else id=Number(db.prepare('INSERT INTO records(kind,data) VALUES(?,?)').run(kind,JSON.stringify(data)).lastInsertRowid);return id;}
 if(!db.prepare("SELECT value FROM app_metadata WHERE key='banks-defaults-v1'").get()){
  db.exec('BEGIN IMMEDIATE');try{
@@ -135,7 +135,7 @@ const server=http.createServer(async(req,res)=>{
  return res.end(Buffer.from(attachment.content));
  }
  if(req.method==='GET' && url.pathname==='/api/state'){syncRecurring(db);return res.end(JSON.stringify(Object.fromEntries([...kinds.map(k=>[k,list(k)]),['recurringCharges',db.prepare('SELECT * FROM recurring_charges ORDER BY id').all().map(x=>({id:x.id,label:x.label,category:x.category,amount:x.amount_cents/100,active:!!x.active,startMonth:x.start_month,lastMonth:x.last_month,supplierId:x.supplier_id||null,supplierName: list('suppliers').find(s=>s.id===x.supplier_id)?.name||''}))],['expenseLifecycleHistory',currentUser.role==='admin'?db.prepare('SELECT id,expense_id AS expenseId,action,reason,actor,at,snapshot FROM expense_lifecycle_history ORDER BY id DESC').all().map(x=>({...x,snapshot:JSON.parse(x.snapshot)})):[]],['recordAudit',currentUser.role==='admin'?db.prepare('SELECT id,kind,record_id AS recordId,action,actor,at,reason,before_data,after_data FROM record_audit ORDER BY id DESC').all().map(x=>({...x,before:JSON.parse(x.before_data),after:JSON.parse(x.after_data),before_data:undefined,after_data:undefined})):[]],['currentUser',publicUser(currentUser)],['users',currentUser.role==='admin'?db.prepare('SELECT id,username,name,role,active FROM users ORDER BY id').all().map(publicUser):[]],['settings',JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data || '{}')]])));}
- let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>(url.pathname==='/api/expensePayments'?7500000:1000000))throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');
+ let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>(url.pathname==='/api/expensePayments'?7500000:url.pathname==='/api/jumiaReports'?4500000:1000000))throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');
  if(url.pathname==='/api/users' && req.method==='POST') {
  if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}
  const existing=body.id?db.prepare('SELECT * FROM users WHERE id=?').get(Number(body.id)):null;
@@ -170,7 +170,7 @@ const server=http.createServer(async(req,res)=>{
  }
  const kind=url.pathname.split('/')[2];if(kind==='settings'){if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(body));return res.end('{}');}
  if(!kinds.includes(kind)&&kind!=='adminRecords')throw Error('Module inconnu');
- if(['jumiaStores','jumiaOrders','jumiaHubs'].includes(kind)){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleJumia({db,body,user:currentUser,list,save,kind})));}
+ if(['jumiaStores','jumiaOrders','jumiaHubs','jumiaReports'].includes(kind)){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleJumia({db,body,user:currentUser,list,save,kind})));}
  if(kind==='accountOpenings'){
  if(req.method!=='POST'||currentUser.role!=='admin')throw Error('Gestion de trésorerie réservée aux administrateurs');
  if(!Number.isSafeInteger(body.bankId)||body.bankId<0||(body.bankId&&!list('banks').some(b=>b.id===body.bankId)))throw Error('Compte invalide');
@@ -339,7 +339,7 @@ const server=http.createServer(async(req,res)=>{
  }
  return res.end(JSON.stringify({id:save(kind,{...body,active:true})}));
  }
- const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js'].includes(file)){res.writeHead(404);return res.end();}
+ const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js'].includes(file)){res.writeHead(404);return res.end();}
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(path.join(__dirname,'public',file)));
  }catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}
 });

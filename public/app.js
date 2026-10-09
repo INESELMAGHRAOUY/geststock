@@ -1,7 +1,7 @@
 let state={},page='dashboard',lines=[],editingUser=null,editingContact=null,editingProduct=null,editingBank=null,addingProduct=false;
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=n=>Number(n||0).toFixed(2)+' '+esc(state.settings.currency||'MAD');
-const menus={dashboard:'Vue d’ensemble',products:'Articles',clients:'Clients',suppliers:'Fournisseurs',documents:'Factures & devis',cheques:'Chèques',settings:'Paramètres',users:'Utilisateurs',charges:'Charges',banks:'Banques',audit:'Historique',purchaseEntry:'Nouvelle opération fournisseur',purchasePending:'Instances fournisseurs',purchaseHistory:'Historique des achats',inventories:'Inventaires',stockCurrent:'Stock actuel',supplierSettlements:'Règlements fournisseurs',clientSettlements:'Règlements clients',treasury:'Trésorerie',jumiaOrders:'Commandes Jumia',jumiaStores:'Boutiques Jumia',jumiaDashboard:'Suivi & résultats Jumia',jumiaHubs:'Hubs Jumia',jumiaListings:'Listings Jumia'};
+const menus={dashboard:'Vue d’ensemble',products:'Articles',clients:'Clients',suppliers:'Fournisseurs',documents:'Factures & devis',cheques:'Chèques',settings:'Paramètres',users:'Utilisateurs',charges:'Charges',banks:'Banques',audit:'Historique',purchaseEntry:'Nouvelle opération fournisseur',purchasePending:'Instances fournisseurs',purchaseHistory:'Historique des achats',inventories:'Inventaires',stockCurrent:'Stock actuel',supplierSettlements:'Règlements fournisseurs',clientSettlements:'Règlements clients',treasury:'Trésorerie',jumiaOrders:'Commandes Jumia',jumiaStores:'Boutiques Jumia',jumiaDashboard:'Suivi & résultats Jumia',jumiaHubs:'Hubs Jumia',jumiaListings:'Listings Jumia',jumiaImports:'Import & analyse Jumia'};
 const openNavGroups=new Set();
 const navIcon='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2 3h3l3 13h10l3-9H6"/><circle cx="9" cy="21" r="1"/><circle cx="18" cy="21" r="1"/></svg>';
 function renderNavigation(){
@@ -13,7 +13,7 @@ function renderNavigation(){
  group('fiches','Fiches',item('products','Articles')+item('clients','Clients')+item('suppliers','Fournisseurs'),['products','clients','suppliers'].includes(page))+
  group('clients','Clients',item('documents','Factures & devis')+item('cheques','Chèques')+item('clientSettlements','Règlements'),['documents','cheques','clientSettlements'].includes(page))+
  group('fournisseurs','Fournisseurs',item('purchaseEntry','Nouvelle opération')+item('purchasePending','Instances')+item('purchaseHistory','Historique')+item('supplierSettlements','Règlements'),['purchaseEntry','purchasePending','purchaseHistory','supplierSettlements'].includes(page))+
- group('jumia','Jumia',item('jumiaOrders','Commandes')+item('jumiaDashboard','Suivi & résultats')+(admin?item('jumiaListings','Listings')+item('jumiaStores','Boutiques')+item('jumiaHubs','Hubs'):''),['jumiaOrders','jumiaDashboard','jumiaStores','jumiaHubs','jumiaListings'].includes(page))+
+ group('jumia','Jumia',item('jumiaOrders','Commandes')+item('jumiaDashboard','Suivi & résultats')+item('jumiaImports','Import & analyse')+(admin?item('jumiaListings','Listings')+item('jumiaStores','Boutiques')+item('jumiaHubs','Hubs'):''),['jumiaOrders','jumiaDashboard','jumiaStores','jumiaHubs','jumiaListings','jumiaImports'].includes(page))+
  item('treasury','Trésorerie')+
  group('stock','Stock',item('inventories','Inventaires')+item('stockCurrent','Stock actuel'),['inventories','stockCurrent'].includes(page))+
  group('charges','Charges',[['entry','Saisir une charge'],['history','Historique des charges'],['payments','Paiements des charges'],['recurring','Charges périodiques'],...(admin?[['deleted','Historique des désactivations']]:[])].map(([tab,label])=>item('charges',label,tab)).join(''),page==='charges')+
@@ -68,7 +68,7 @@ function render(){
  if(['purchaseEntry','purchasePending','purchaseHistory','inventories','stockCurrent'].includes(page))html=renderSupplyStock();
  if(['supplierSettlements','clientSettlements'].includes(page))html=renderSettlements();
  if(page==='treasury')html=renderTreasury();
- if(['jumiaOrders','jumiaDashboard','jumiaStores','jumiaHubs','jumiaListings'].includes(page))html=renderJumia();
+ if(['jumiaOrders','jumiaDashboard','jumiaStores','jumiaHubs','jumiaListings','jumiaImports'].includes(page))html=renderJumia();
  if(page==='audit')html=renderRecordAudit();
  if(page==='charges')html=renderCharges();
  $('#content').innerHTML=html;if(page==='documents')renderLines();syncEditModal();

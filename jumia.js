@@ -1,3 +1,4 @@
+const {parseJumiaCSV}=require('./public/jumia-import');
 const crypto=require('node:crypto');const {auditRecord}=require('./record-admin');const {jumiaStatuses,jumiaStockLines}=require('./public/jumia-math');
 const validDate=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.isNaN(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v;
 const money=(v,name,nullable=false)=>{if(nullable&&(v===null||v===''||v===undefined))return null;if(!Number.isFinite(v)||v<0||!Number.isSafeInteger(Math.round(v*100))||Math.abs(v*100-Math.round(v*100))>0.00001)throw Error(name+' invalide');return v;};
@@ -21,6 +22,10 @@ function handleJumia({db,body,user,list,save,kind}){
  updated={...old,lines:old.lines.map(l=>l.status==='Expédié'?{...l,status:body.results.find(r=>r.lineId===l.lineId).status}:l)};
  }else if(body.action==='setActive'){
  if(!old||typeof body.active!=='boolean'||body.active===(old.active!==false))throw Error('État invalide');updated={...old,active:body.active};
+ }else if(kind==='jumiaReports'){
+ if(old)throw Error('Un import ne peut pas être modifié');const store=list('jumiaStores').find(s=>s.id===body.storeId&&s.active!==false);if(!store)throw Error('Choisissez une boutique active');
+ const transactions=parseJumiaCSV(body.csv);const existing=new Set(list(kind).filter(r=>r.active!==false&&r.storeId===store.id).flatMap(r=>r.transactions.map(t=>t['Transaction Number'])));if(transactions.some(t=>existing.has(t['Transaction Number'])))throw Error('Ce fichier contient des transactions déjà importées dans cette boutique');
+ updated={storeId:store.id,storeName:store.name,fileName:String(body.fileName||'Export Jumia.csv').slice(0,200),transactions,active:true};
  }else if(kind==='jumiaHubs'){
  if(user.role!=='admin')throw Error('Gestion des hubs réservée aux administrateurs');
  if(typeof body.name!=='string'||!body.name.trim()||typeof body.city!=='string'||!body.city.trim())throw Error('Nom et ville du hub obligatoires');
