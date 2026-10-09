@@ -25,10 +25,9 @@ function handleRecordAdmin({db,body,user,list,save}){
  const client=data.clientId?list('clients').find(c=>c.id===data.clientId):null;if(data.clientId&&!client)throw Error('Client introuvable');
  Object.assign(updated,{lines,tax:data.tax,clientId:client?.id||null,clientName:client?.name||'Client comptoir',total:lines.reduce((s,l)=>s+l.qty*l.price,0)*(1+data.tax/100)});
  }else if(kind==='movements'){
- const product=list('products').find(p=>p.id===data.productId);if(!product||!Number.isFinite(data.qty)||data.qty<=0)throw Error('Réception invalide');
- if(data.unitPrice!==undefined&&(!Number.isFinite(data.unitPrice)||data.unitPrice<0))throw Error('Prix achat invalide');
+ const lines=require('./purchase').purchaseLines(data,list('products'));
  const supplier=data.supplierId?list('suppliers').find(x=>x.id===data.supplierId):null;if(data.supplierId&&!supplier)throw Error('Fournisseur introuvable');
- Object.assign(updated,{unitPrice:data.unitPrice??old.unitPrice,productId:product.id,name:product.name,qty:data.qty,supplierId:supplier?.id||null,reference:String(data.reference||''),supplierName:supplier?.name||''});
+ Object.assign(updated,{lines,total:lines.reduce((sum,l)=>sum+l.total,0),name:lines.map(l=>l.name).join(', '),supplierId:supplier?.id||null,reference:String(data.reference||''),supplierName:supplier?.name||''});
  }else if(kind==='inventories'){
  const product=list('products').find(p=>p.id===old.productId);if(!product||!Number.isFinite(data.counted)||data.counted<0)throw Error('Quantité comptée invalide');
  const delta=data.counted-old.previousStock;Object.assign(updated,{counted:data.counted,delta});
@@ -44,7 +43,7 @@ function handleRecordAdmin({db,body,user,list,save}){
  const stockEffects=record=>{
  if(record.active===false)return [];
  if(kind==='documents'&&record.type==='Facture')return record.lines.map(l=>[l.productId,-l.qty]);
- if(kind==='movements'&&record.status!=='pending')return [[record.productId,record.qty]];
+ if(kind==='movements'&&record.status!=='pending')return (record.lines||[record]).map(l=>[l.productId,l.qty]);
  if(kind==='inventories')return [[record.productId,record.delta]];
  return [];
  };

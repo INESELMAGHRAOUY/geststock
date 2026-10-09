@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {DatabaseSync, backup} = require('node:sqlite');
 const crypto = require('node:crypto');
+const {purchaseLines}=require('./purchase');
 const {stockBreakdown,initializeStock}=require('./stock');
 const {setupRecordAudit,auditRecord,handleRecordAdmin}=require('./record-admin');
 const {amountToWords}=require('./public/amount-words');
@@ -310,8 +311,8 @@ const server=http.createServer(async(req,res)=>{
  if(body.unitPrice!==undefined&&(!Number.isFinite(body.unitPrice)||body.unitPrice<0))throw Error('Prix achat invalide');
  const supplier=body.supplierId?list('suppliers').find(s=>s.id===body.supplierId&&s.active!==false):null;if(body.supplierId&&!supplier)throw Error('Fournisseur introuvable');
  body.status=body.status||'received';body.supplierName=supplier?.name||'';
- const p=list('products').find(p=>p.id===body.productId);if(!p||p.active===false||!Number.isFinite(body.qty)||body.qty<=0)throw Error('Entrée invalide');
- db.exec('BEGIN');try{const id=save(kind,{...body,active:true,name:p.name,date:new Date().toISOString()});db.exec('COMMIT');return res.end(JSON.stringify({id}));}catch(e){db.exec('ROLLBACK');throw e;}}
+ const lines=purchaseLines(body,list('products'));
+ db.exec('BEGIN');try{const id=save(kind,{...body,lines,total:lines.reduce((sum,l)=>sum+l.total,0),active:true,name:lines.map(l=>l.name).join(', '),date:new Date().toISOString()});db.exec('COMMIT');return res.end(JSON.stringify({id}));}catch(e){db.exec('ROLLBACK');throw e;}}
  if(kind==='cheques'){
  if(!body.beneficiary?.trim()||!Number.isFinite(body.amount)||body.amount<=0)throw Error('Chèque invalide');
  const currency=JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data||'{}').currency||'MAD';

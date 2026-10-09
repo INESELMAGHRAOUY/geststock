@@ -12,3 +12,5 @@ aside{overflow-y:auto}aside nav{display:block;margin:24px -22px}aside nav button
 .payment-existing-attachment{width:100%;display:flex;align-items:center;gap:16px;padding:12px 14px;border:1px solid #e3eaf0;border-radius:8px;background:#f4f7fa}.payment-existing-attachment>span{font-size:13px;color:#587086}.payment-existing-attachment>div{display:flex;align-items:center;gap:8px}#edit-dialog label small{letter-spacing:0;font-size:12px}
 
 .dashboard-charge-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.dashboard-charge-note{color:#587086;font-size:13px;margin:0 0 22px}@media(max-width:500px){.dashboard-charge-cards{grid-template-columns:1fr}}
+
+.purchase-add{display:flex;gap:14px;align-items:end;width:100%}.purchase-add label{flex:1}.purchase-lines{width:100%;overflow:auto}.purchase-lines input{width:105px;min-width:80px}.purchase-lines h3{text-align:right}
