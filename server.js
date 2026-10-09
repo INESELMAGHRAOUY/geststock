@@ -289,7 +289,7 @@ const server=http.createServer(async(req,res)=>{
  }
  return res.end(JSON.stringify({id:save(kind,body,body.id)}));
  }
- const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','charges.js','amount-words.js'].includes(file)){res.writeHead(404);return res.end();}
+ const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','charges.js','amount-words.js','cheque-print.js'].includes(file)){res.writeHead(404);return res.end();}
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(path.join(__dirname,'public',file)));
  }catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}
 });

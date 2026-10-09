@@ -70,3 +70,10 @@ Dans Historique des charges, un administrateur peut Désactiver ou Réactiver un
 Une charge non active et ses paiements sont exclus des totaux actifs. Les paiements, chèques et justificatifs restent dans l’historique ; on peut toujours consulter et télécharger les pièces. Il faut réactiver la charge pour modifier ou valider ses paiements. Désactiver une échéance générée ne met pas en pause son modèle mensuel : utiliser Pause dans Charges périodiques pour arrêter les prochaines échéances. Le journal est conservé dans la base et ses nouvelles sauvegardes.
 
 La conversion française des montants inclut les centimes et les règles de pluriel (cent, quatre-vingts, mille, millions). Elle est utilisée pour les chèques des paiements et dans le menu Chèques. La ville est toujours Rabat.
+
+
+## Modèle de chèque CDM provenant du Word
+
+Le formulaire Imprimer d’un paiement CDM sélectionne le modèle Word : page personnalisée 220 × 110 mm, paysage, police Sakkal Majalla 14 pt gras, marge haute 20 mm et marges latérales 25 mm. Le montant numérique est entouré de #, le montant en lettres est converti en arabe, la ville est الرباط et la date est au format jj/mm/aaaa. Seuls les textes sont imprimés, sans image du chèque ni coordonnées bancaires de l’exemple fourni. Les décalages horizontal et vertical en mm déplacent l’ensemble du texte pour corriger l’alignement de la machine. Les autres banques conservent le modèle générique, avec possibilité de sélectionner CDM dans le formulaire.
+
+Dans la fenêtre d’impression, sélectionner le papier personnalisé 22 × 11 cm, échelle 100 %, marges nulles, sans en-têtes/pieds de page. Utiliser Sakkal Majalla installé sur le poste Windows ; à défaut, le navigateur utilise une police de remplacement et la disposition peut changer. Les paramètres du Word sont reproduits ; l’alignement physique doit être validé sur une feuille de même taille avant de charger un chèque. Le module Chèques utilise également le modèle CDM.
