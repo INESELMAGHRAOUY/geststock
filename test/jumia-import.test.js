@@ -19,3 +19,8 @@ test('CSV comparison uses store/order/SKU and purchase snapshots; counts units o
  const feeOnly=[{storeId:1,transactions:[base[1]]}];assert.equal(compareJumiaReports(feeOnly,orders).details[0].cost,null);
  const other={storeId:2,storeName:'Other',transactions:base};c=compareJumiaReports([...reports,other],orders);assert.equal(c.skus.length,2);assert.equal(c.skus[0].missing,0);assert.equal(c.skus[1].missing,1);
 });
+test('fee comparison exposes net discrepancy even when sales match',()=>{
+ const {compareJumiaReports}=require('../public/jumia-import');const reports=[{storeId:1,transactions:parseJumiaCSV(csv)}];const order={storeId:1,number:'ORDER',lines:[{sku:'SKU',qty:1,purchasePrice:40,salePrice:100,status:'Livré',commissionPercent:16,commissionActual:null,shippingContribution:6}]};let d=compareJumiaReports(reports,[order]).details[0];assert.equal(d.difference,0);assert.equal(d.enteredCommission,1600);assert.equal(d.commission,1500);assert.equal(d.enteredShipping,600);assert.equal(d.shipping,600);assert.equal(d.enteredNet,7800);assert.equal(d.netDifference,100);
+ order.lines[0].commissionActual=15;d=compareJumiaReports(reports,[order]).details[0];assert.equal(d.netDifference,0);
+ order.lines[0].qty=2;d=compareJumiaReports(reports,[order]).details[0];assert.equal(d.enteredNet,null);assert.equal(d.netDifference,null);
+});
