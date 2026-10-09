@@ -9,10 +9,14 @@ function expensePaid(expense){return state.expensePayments.filter(p=>p.expenseId
 function expenseStatus(expense){const paid=expensePaid(expense);return paid===0&&expenseCommitted(expense)>0?'Chèque en instance':paid===0?'Non payée':paid>=expense.amountCents?'Payée':'Partiellement payée';}
 function chargeSupplierSelect(id){return `<label>Fournisseur<select name="supplierId">${options('suppliers','Facultatif')}</select></label>`.replace(`value="${id}"`,`value="${id}" selected`);}
 function chargeDate(){return new Date().toISOString().slice(0,10);}
-function renderCharges(){
+function chargeSummary(){
  const total=state.expenses.filter(expenseIsActive).reduce((s,x)=>s+x.amountCents,0),paid=state.expensePayments.filter(p=>p.active!==false&&paymentIsPaid(p)&&paymentHasActiveCharge(p)).reduce((s,x)=>s+x.amountCents,0);
  const pending=state.expensePayments.filter(p=>p.active!==false&&p.method==='Chèque'&&!paymentIsPaid(p)&&paymentHasActiveCharge(p)).reduce((s,x)=>s+x.amountCents,0);
- let html=`<div class="cards">${[['Total charges',money(total/100)],['Montant payé',money(paid/100)],['Reste à payer',money((total-paid)/100)],['Chèques en instance',money(pending/100)]].map(([title,value])=>`<div class="card">${title}<strong>${value}</strong></div>`).join('')}</div>`;
+ return {total,paid,pending,remaining:total-paid};
+}
+function renderCharges(){
+ const {total,paid,pending,remaining}=chargeSummary();
+ let html=`<div class="cards">${[['Total charges',money(total/100)],['Montant payé',money(paid/100)],['Reste à payer',money(remaining/100)],['Chèques en instance',money(pending/100)]].map(([title,value])=>`<div class="card">${title}<strong>${value}</strong></div>`).join('')}</div>`;
  if(chargeTab==='entry')html+=`<div class="panel"><h3>Saisir une charge</h3><form data-kind="expenses">${field('label','Libellé / Dépense')}${field('category','Catégorie (loyer, transport…)')}${field('amount','Montant total','number')}${field('date','Date','date',chargeDate())}<label>Fournisseur<select name="supplierId">${options('suppliers','Facultatif')}</select></label>${field('reference','Référence / Facture')}${field('notes','Notes')}<button>Enregistrer la charge</button></form><p>Le paiement se saisit séparément dans Paiements des charges. Les montants correspondent à la dépense totale, dans la devise de l’entreprise.</p></div>`;
  if(chargeTab==='recurring'){
  const r=editingRecurring||{label:'',category:'',amount:'',active:true,startMonth:chargeDate().slice(0,7)};
