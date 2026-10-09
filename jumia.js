@@ -3,6 +3,7 @@ const validDate=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.i
 const money=(v,name,nullable=false)=>{if(nullable&&(v===null||v===''||v===undefined))return null;if(!Number.isFinite(v)||v<0||!Number.isSafeInteger(Math.round(v*100))||Math.abs(v*100-Math.round(v*100))>0.00001)throw Error(name+' invalide');return v;};
 function handleJumia({db,body,user,list,save,kind}){
  db.exec('BEGIN IMMEDIATE');try{
+ if(body.action==='delivery')body.reason='Résultat de livraison';
  if(body.action==='ready')body.reason='Commande prête à expédier';if(body.action==='ship')body.reason='Commande expédiée';
  const old=body.id!==undefined?list(kind).find(o=>o.id===body.id):null;if(body.id!==undefined&&!old)throw Error('Élément Jumia introuvable');
  if(old){if(user.role!=='admin')throw Error('Modification réservée aux administrateurs');if(JSON.stringify(old)!==body.expectedRecord)throw Error('Cet élément a changé. Rouvrez le formulaire');if(!body.reason?.trim())throw Error('Motif obligatoire');}
@@ -13,6 +14,11 @@ function handleJumia({db,body,user,list,save,kind}){
  }else if(body.action==='ship'){
  if(kind!=='jumiaOrders'||!old||old.active===false||!old.lines.some(l=>l.status==='Prêt à expédier'))throw Error('Aucune ligne prête à expédier');
  updated={...old,lines:old.lines.map(l=>l.status==='Prêt à expédier'?{...l,status:'Expédié',dispatched:true,returnedToStock:false,purchasePrice:list('products').find(p=>p.id===l.productId)?.lastPurchasePrice??l.purchasePrice,purchaseSourceId:list('products').find(p=>p.id===l.productId)?.purchaseSourceId??l.purchaseSourceId??null}:l)};
+ }else if(body.action==='delivery'){
+ if(kind!=='jumiaOrders'||!old||old.active===false||!old.lines.some(l=>l.status==='Expédié'))throw Error('Aucune ligne expédiée à mettre à jour');
+ const shipped=old.lines.filter(l=>l.status==='Expédié');
+ if(!Array.isArray(body.results)||body.results.length!==shipped.length||new Set(body.results.map(r=>r.lineId)).size!==shipped.length||body.results.some(r=>!shipped.some(l=>l.lineId===r.lineId)||!['Livré','La livraison a échoué'].includes(r.status)))throw Error('Choisissez le résultat de chaque article expédié');
+ updated={...old,lines:old.lines.map(l=>l.status==='Expédié'?{...l,status:body.results.find(r=>r.lineId===l.lineId).status}:l)};
  }else if(body.action==='setActive'){
  if(!old||typeof body.active!=='boolean'||body.active===(old.active!==false))throw Error('État invalide');updated={...old,active:body.active};
  }else if(kind==='jumiaHubs'){
