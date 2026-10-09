@@ -6,10 +6,10 @@ test('multi-store Jumia orders, delivery profitability, purchase-stock shipping 
  const save=(kind,data,id)=>{if(id){db.prepare('UPDATE records SET data=? WHERE id=?').run(JSON.stringify(data),id);return id;}return Number(db.prepare('INSERT INTO records(kind,data) VALUES(?,?)').run(kind,JSON.stringify(data)).lastInsertRowid);};
  const user={role:'admin',name:'Admin'},run=(kind,body)=>handleJumia({db,kind,body,user,list,save});
  const s1=run('jumiaStores',{name:'INOM COLLECTIONS',commissionPercent:10}).id,s2=run('jumiaStores',{name:'OTHER',commissionPercent:10}).id;
- const p1=save('products',{name:'A',price:199,purchasePrice:100,stock:0,initialStock:0}),p2=save('products',{name:'B',price:100,purchasePrice:50,stock:0,initialStock:0});
+ const p1=save('products',{name:'A',sku:'PRODUCT-SKU',price:199,purchasePrice:100,stock:0,initialStock:0}),p2=save('products',{name:'B',price:100,purchasePrice:50,stock:0,initialStock:0});
  const line=(productId,name,status)=>({productId,name,qty:1,purchasePrice:name==='A'?100:50,salePrice:name==='A'?199:100,status,fromStock:false,commissionPercent:10,commissionActual:null,shippingContribution:6,otherFees:0,refundCredit:0});
  const body={storeId:s1,number:'378395468',date:'2026-10-08',lines:[line(p1,'A','En attente'),line(p2,'B','En attente')],costs:{ticketQty:1,ticketUnitPrice:1,saltKg:.5,saltUnitPrice:2,cartonQty:1,cartonUnitPrice:3,supplierTransport:10,hubTransport:5}};
- const id=run('jumiaOrders',body).id;assert.equal(list('products').find(p=>p.id===p1).stock,0);assert.throws(()=>run('jumiaOrders',body),/existe déjà/);
+ body.lines[0].sku='IGNORED-MANUAL-SKU';const id=run('jumiaOrders',body).id;assert.equal(list('jumiaOrders').find(o=>o.id===id).lines[0].sku,'PRODUCT-SKU');assert.equal(list('products').find(p=>p.id===p1).stock,0);assert.throws(()=>run('jumiaOrders',body),/existe déjà/);
  const other=run('jumiaOrders',{...body,storeId:s2,lines:[line(p1,'A','En attente')]}).id;assert.equal(jumiaSummary(list('jumiaOrders')).count,2);
  let o=list('jumiaOrders').find(o=>o.id===id);const edit=data=>run('jumiaOrders',{...o,...data,id,expectedRecord:JSON.stringify(o),reason:'Status update'});
  assert.throws(()=>edit({lines:o.lines.map(l=>({...l,status:'Expédié'}))}),/Stock insuffisant/);assert.equal(list('jumiaOrders').find(o=>o.id===id).lines[0].status,'En attente');

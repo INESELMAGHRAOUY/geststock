@@ -11,7 +11,7 @@ function handleJumia({db,body,user,list,save,kind}){
  }else if(kind==='jumiaStores'){
  if(user.role!=='admin')throw Error('Gestion des stores réservée aux administrateurs');if(typeof body.name!=='string'||!body.name.trim())throw Error('Nom de boutique obligatoire');
  if(list(kind).some(s=>s.id!==old?.id&&s.name.toLowerCase()===body.name.trim().toLowerCase()))throw Error('Cette boutique existe déjà');
- const defaults={};for(const key of ['ticketUnitPrice','saltUnitPrice','cartonUnitPrice','supplierTransport','hubTransport'])defaults[key]=money(body.defaults?.[key]??0,key);
+ const defaults={};for(const key of ['ticketUnitPrice','saltUnitPrice','cartonUnitPrice','supplierTransport','hubTransport'])defaults[key]=money(body.defaults?.[key]??old?.defaults?.[key]??0,key);
  const commissionPercent=body.commissionPercent??0;if(!Number.isFinite(commissionPercent)||commissionPercent<0||commissionPercent>100)throw Error('Commission invalide');
  updated={name:body.name.trim(),commissionPercent,defaults,active:old?.active!==false};
  }else{
@@ -28,7 +28,7 @@ function handleJumia({db,body,user,list,save,kind}){
  const dispatched=!!prior?.dispatched||['Expédié','Livré','La livraison a échoué','Retourné'].includes(l.status);
  if(l.returnedToStock&&(!dispatched||l.status==='Livré'))throw Error('Le retour physique au stock ne concerne pas un article livré');
  if(l.lost&&l.returnedToStock)throw Error('Un article perdu ne peut pas être remis en stock');
- return {lineId,productId:product?.id||null,name,sku:String(l.sku||product?.sku||''),jumiaSku:String(l.jumiaSku||''),supplierId:l.supplierId||null,qty:l.qty,purchasePrice:money(l.purchasePrice,'Prix achat'),salePrice:money(l.salePrice,'Prix vente'),status:l.status,fromStock:true,dispatched,returnedToStock:!!l.returnedToStock,lost:!!l.lost,commissionPercent:percent,commissionActual:money(l.commissionActual,'Commission prélevée',true),shippingContribution:money(l.shippingContribution??0,'Contribution livraison'),otherFees:money(l.otherFees??0,'Autres frais'),refundCredit:money(l.refundCredit??0,'Remboursement Jumia')};
+ return {lineId,productId:product?.id||null,name,sku:String(product.sku||''),jumiaSku:String(l.jumiaSku||''),supplierId:l.supplierId||null,qty:l.qty,purchasePrice:money(l.purchasePrice,'Prix achat'),salePrice:money(l.salePrice,'Prix vente'),status:l.status,fromStock:true,dispatched,returnedToStock:!!l.returnedToStock,lost:!!l.lost,commissionPercent:percent,commissionActual:money(l.commissionActual,'Commission prélevée',true),shippingContribution:money(l.shippingContribution??0,'Contribution livraison'),otherFees:money(l.otherFees??0,'Autres frais'),refundCredit:money(l.refundCredit??0,'Remboursement Jumia')};
  });
  const costs={};for(const key of ['supplierTransport','hubTransport','ticketUnitPrice','saltUnitPrice','cartonUnitPrice','other'])costs[key]=money(body.costs?.[key]??0,key);
  for(const key of ['ticketQty','cartonQty','saltKg']){const value=body.costs?.[key]??0;if(!Number.isFinite(value)||value<0||(key!=='saltKg'&&!Number.isSafeInteger(value)))throw Error('Quantité emballage invalide');costs[key]=value;}
