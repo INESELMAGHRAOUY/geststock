@@ -2,8 +2,8 @@ const {parseJumiaCSV}=require('./public/jumia-import');
 const crypto=require('node:crypto');const {auditRecord}=require('./record-admin');const {jumiaStatuses,jumiaStockLines}=require('./public/jumia-math');
 const validDate=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.isNaN(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v;
 const money=(v,name,nullable=false)=>{if(nullable&&(v===null||v===''||v===undefined))return null;if(!Number.isFinite(v)||v<0||!Number.isSafeInteger(Math.round(v*100))||Math.abs(v*100-Math.round(v*100))>0.00001)throw Error(name+' invalide');return v;};
-function handleJumia({db,body,user,list,save,kind}){
- db.exec('BEGIN IMMEDIATE');try{
+function handleJumia({db,body,user,list,save,kind,outerTransaction=false}){
+ if(!outerTransaction)db.exec('BEGIN IMMEDIATE');try{
  if(body.action==='delivery')body.reason='Résultat de livraison';
  if(body.action==='ready')body.reason='Commande prête à expédier';if(body.action==='ship')body.reason='Commande expédiée';
  const old=body.id!==undefined?list(kind).find(o=>o.id===body.id):null;if(body.id!==undefined&&!old)throw Error('Élément Jumia introuvable');
@@ -70,7 +70,7 @@ function handleJumia({db,body,user,list,save,kind}){
  updated.history=[...(old?.history||[]),{at:new Date().toISOString(),by:user.name,reason:body.reason||'Commande saisie',statuses:updated.lines.map(l=>({lineId:l.lineId,name:l.name,status:l.status}))}];
  }
  updated.createdAt=old?.createdAt||new Date().toISOString();updated.createdBy=old?.createdBy||user.name;updated.updatedAt=new Date().toISOString();updated.updatedBy=user.name;
- const id=save(kind,updated,old?.id);if(old)auditRecord(db,kind,old,{...updated,id},user,body.action==='setActive'?(updated.active?'Réactivation':'Désactivation'):'Modification',body.reason);db.exec('COMMIT');return {id};
- }catch(error){db.exec('ROLLBACK');throw error;}
+ const id=save(kind,updated,old?.id);if(old)auditRecord(db,kind,old,{...updated,id},user,body.action==='setActive'?(updated.active?'Réactivation':'Désactivation'):'Modification',body.reason);if(!outerTransaction)db.exec('COMMIT');return {id};
+ }catch(error){if(!outerTransaction)db.exec('ROLLBACK');throw error;}
 }
 module.exports={handleJumia};

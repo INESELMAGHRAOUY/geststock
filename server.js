@@ -1,3 +1,4 @@
+const {handleOrderImport}=require('./jumia-order-import');
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -135,7 +136,7 @@ const server=http.createServer(async(req,res)=>{
  return res.end(Buffer.from(attachment.content));
  }
  if(req.method==='GET' && url.pathname==='/api/state'){syncRecurring(db);return res.end(JSON.stringify(Object.fromEntries([...kinds.map(k=>[k,list(k)]),['recurringCharges',db.prepare('SELECT * FROM recurring_charges ORDER BY id').all().map(x=>({id:x.id,label:x.label,category:x.category,amount:x.amount_cents/100,active:!!x.active,startMonth:x.start_month,lastMonth:x.last_month,supplierId:x.supplier_id||null,supplierName: list('suppliers').find(s=>s.id===x.supplier_id)?.name||''}))],['expenseLifecycleHistory',currentUser.role==='admin'?db.prepare('SELECT id,expense_id AS expenseId,action,reason,actor,at,snapshot FROM expense_lifecycle_history ORDER BY id DESC').all().map(x=>({...x,snapshot:JSON.parse(x.snapshot)})):[]],['recordAudit',currentUser.role==='admin'?db.prepare('SELECT id,kind,record_id AS recordId,action,actor,at,reason,before_data,after_data FROM record_audit ORDER BY id DESC').all().map(x=>({...x,before:JSON.parse(x.before_data),after:JSON.parse(x.after_data),before_data:undefined,after_data:undefined})):[]],['currentUser',publicUser(currentUser)],['users',currentUser.role==='admin'?db.prepare('SELECT id,username,name,role,active FROM users ORDER BY id').all().map(publicUser):[]],['settings',JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data || '{}')]])));}
- let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>(url.pathname==='/api/expensePayments'?7500000:url.pathname==='/api/jumiaReports'?4500000:1000000))throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');
+ let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>(url.pathname==='/api/expensePayments'?7500000:['/api/jumiaReports','/api/jumiaOrderImports'].includes(url.pathname)?4500000:1000000))throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');
  if(url.pathname==='/api/users' && req.method==='POST') {
  if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}
  const existing=body.id?db.prepare('SELECT * FROM users WHERE id=?').get(Number(body.id)):null;
@@ -169,6 +170,7 @@ const server=http.createServer(async(req,res)=>{
  syncRecurring(db);return res.end('{}');
  }
  const kind=url.pathname.split('/')[2];if(kind==='settings'){if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(body));return res.end('{}');}
+ if(kind==='jumiaOrderImports'){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleOrderImport({db,body,user:currentUser,list,save})));}
  if(!kinds.includes(kind)&&kind!=='adminRecords')throw Error('Module inconnu');
  if(['jumiaStores','jumiaOrders','jumiaHubs','jumiaReports'].includes(kind)){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleJumia({db,body,user:currentUser,list,save,kind})));}
  if(kind==='accountOpenings'){
