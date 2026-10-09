@@ -8,6 +8,12 @@ function handleJumia({db,body,user,list,save,kind}){
  let updated;
  if(body.action==='setActive'){
  if(!old||typeof body.active!=='boolean'||body.active===(old.active!==false))throw Error('État invalide');updated={...old,active:body.active};
+ }else if(kind==='jumiaHubs'){
+ if(user.role!=='admin')throw Error('Gestion des hubs réservée aux administrateurs');
+ if(typeof body.name!=='string'||!body.name.trim()||typeof body.city!=='string'||!body.city.trim())throw Error('Nom et ville du hub obligatoires');
+ for(const key of ['address','phone','contact'])if(body[key]!==undefined&&typeof body[key]!=='string')throw Error('Coordonnées du hub invalides');
+ if(list(kind).some(h=>h.id!==old?.id&&h.name.toLowerCase()===body.name.trim().toLowerCase()&&h.city.toLowerCase()===body.city.trim().toLowerCase()))throw Error('Ce hub existe déjà dans cette ville');
+ updated={name:body.name.trim(),city:body.city.trim(),address:String(body.address||''),phone:String(body.phone||''),contact:String(body.contact||''),active:old?.active!==false};
  }else if(kind==='jumiaStores'){
  if(user.role!=='admin')throw Error('Gestion des stores réservée aux administrateurs');if(typeof body.name!=='string'||!body.name.trim())throw Error('Nom de boutique obligatoire');
  if(list(kind).some(s=>s.id!==old?.id&&s.name.toLowerCase()===body.name.trim().toLowerCase()))throw Error('Cette boutique existe déjà');
@@ -30,9 +36,10 @@ function handleJumia({db,body,user,list,save,kind}){
  if(l.lost&&l.returnedToStock)throw Error('Un article perdu ne peut pas être remis en stock');
  return {lineId,productId:product?.id||null,name,sku:String(product.sku||''),jumiaSku:String(l.jumiaSku||''),supplierId:l.supplierId||null,qty:l.qty,purchasePrice:money(l.purchasePrice,'Prix achat'),salePrice:money(l.salePrice,'Prix vente'),status:l.status,fromStock:true,dispatched,returnedToStock:!!l.returnedToStock,lost:!!l.lost,commissionPercent:percent,commissionActual:money(l.commissionActual,'Commission prélevée',true),shippingContribution:money(l.shippingContribution??0,'Contribution livraison'),otherFees:money(l.otherFees??0,'Autres frais'),refundCredit:money(l.refundCredit??0,'Remboursement Jumia')};
  });
+ const hub=body.hubId?list('jumiaHubs').find(h=>h.id===body.hubId&&(h.active!==false||h.id===old?.hubId)):null;if(body.hubId&&!hub)throw Error('Hub indisponible');
  const costs={};for(const key of ['supplierTransport','hubTransport','ticketUnitPrice','saltUnitPrice','cartonUnitPrice','other'])costs[key]=money(body.costs?.[key]??0,key);
  for(const key of ['ticketQty','cartonQty','saltKg']){const value=body.costs?.[key]??0;if(!Number.isFinite(value)||value<0||(key!=='saltKg'&&!Number.isSafeInteger(value)))throw Error('Quantité emballage invalide');costs[key]=value;}
- updated={storeId:store.id,storeName:store.name,number:body.number.trim(),date:body.date,customer:String(body.customer||''),address:String(body.address||''),paymentMethod:String(body.paymentMethod||'À la livraison'),shippingMethod:String(body.shippingMethod||'Dropshipping'),tracking:String(body.tracking||''),notes:String(body.notes||''),lines,costs,active:old?.active!==false};
+ updated={storeId:store.id,storeName:store.name,hubId:hub?.id||null,hubName:hub?.name||'',hubCity:hub?.city||'',hubAddress:hub?.address||'',number:body.number.trim(),date:body.date,customer:String(body.customer||''),address:String(body.address||''),paymentMethod:String(body.paymentMethod||'À la livraison'),shippingMethod:String(body.shippingMethod||'Dropshipping'),tracking:String(body.tracking||''),notes:String(body.notes||''),lines,costs,active:old?.active!==false};
  }
  if(kind==='jumiaOrders'){
  const delta=new Map();for(const [id,q] of jumiaStockLines(old||{lines:[]}))delta.set(id,(delta.get(id)||0)-q);for(const [id,q] of jumiaStockLines(updated))delta.set(id,(delta.get(id)||0)+q);
