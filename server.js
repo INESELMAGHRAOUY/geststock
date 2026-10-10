@@ -74,7 +74,7 @@ initialization.then(dailyBackup).catch(()=>{});
 setInterval(dailyBackup,60*60*1000).unref();
 const rawList = kind => db.prepare('SELECT id,data FROM records WHERE kind=? ORDER BY id DESC').all(kind).map(r=>({ ...JSON.parse(r.data),id:r.id}));
 const list=kind=>{const records=rawList(kind);if(kind!=='products')return records;const movements=rawList('movements'),documents=rawList('documents'),inventories=rawList('inventories'),orders=rawList('jumiaOrders');return records.map(p=>stockBreakdown(p,movements,documents,inventories,orders));};
-const kinds = ['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments','banks','inventories','settlements','accountOpenings','jumiaStores','jumiaOrders','jumiaHubs','jumiaReports'];
+const kinds = ['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments','banks','inventories','settlements','accountOpenings','jumiaStores','jumiaOrders','jumiaHubs','jumiaReports','jumiaCategories'];
 function save(kind,data,id){if(id) db.prepare('UPDATE records SET data=? WHERE id=? AND kind=?').run(JSON.stringify(data),id,kind);else id=Number(db.prepare('INSERT INTO records(kind,data) VALUES(?,?)').run(kind,JSON.stringify(data)).lastInsertRowid);return id;}
 if(!db.prepare("SELECT value FROM app_metadata WHERE key='banks-defaults-v1'").get()){
  db.exec('BEGIN IMMEDIATE');try{
@@ -174,7 +174,7 @@ const server=http.createServer(async(req,res)=>{
  const kind=url.pathname.split('/')[2];if(kind==='settings'){if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(body));return res.end('{}');}
  if(kind==='jumiaOrderImports'){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleOrderImport({db,body,user:currentUser,list,save})));}
  if(!kinds.includes(kind)&&kind!=='adminRecords')throw Error('Module inconnu');
- if(['jumiaStores','jumiaOrders','jumiaHubs','jumiaReports'].includes(kind)){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleJumia({db,body,user:currentUser,list,save,kind})));}
+ if(['jumiaStores','jumiaOrders','jumiaHubs','jumiaReports','jumiaCategories'].includes(kind)){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleJumia({db,body,user:currentUser,list,save,kind})));}
  if(kind==='accountOpenings'){
  if(req.method!=='POST'||currentUser.role!=='admin')throw Error('Gestion de trésorerie réservée aux administrateurs');
  if(!Number.isSafeInteger(body.bankId)||body.bankId<0||(body.bankId&&!list('banks').some(b=>b.id===body.bankId)))throw Error('Compte invalide');
