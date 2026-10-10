@@ -1,1 +1,1 @@
-{"name":"geststock","version":"1.0.0","private":true,"scripts":{"start":"node server.js","test":"node --test"},"engines":{"node":">=22.13"}}
+{"name":"geststock","version":"1.0.0","private":true,"scripts":{"start":"node server.js","test":"node --test"},"engines":{"node":">=22.13"},"dependencies":{"fast-xml-parser":"^5.11.2","fflate":"^0.8.3"}}
