@@ -52,3 +52,6 @@ test('Jumia shipping contribution is charged for every unit sold',()=>{
  order.lines[0].qty=3;t=jumiaOrderTotals(order);assert.equal(t.marketplaceFees,4800);assert.equal(t.forecast,19200);assert.equal(t.profit,19200);
  order.lines[0].shippingContribution=0;assert.equal(jumiaOrderTotals(order).marketplaceFees,3000);
 });
+test('Jumia customers aggregate delivered purchases by name and address and exclude canceled orders',()=>{
+ const {jumiaCustomers}=require('../public/jumia-math');const make=(id,customer,address,status,active=true)=>({id,customer,address,active,date:'2026-10-10',storeId:id,lines:[{status,qty:2,salePrice:100}]});const customers=jumiaCustomers([make(1,'Client A','Address','Livré'),make(2,' client a ','Address','Livré'),make(3,'Client A','Other address','Livré'),make(4,'Client B','Address','Annulé'),make(5,'Client C','Address','Livré',false),make(6,'','','Livré'),make(7,'','','Livré')]);assert.equal(customers.length,4);assert.equal(customers[0].orders.length,2);assert.equal(customers[0].amount,40000);assert.equal(customers.filter(c=>c.name==='Client non renseigné').length,2);
+});

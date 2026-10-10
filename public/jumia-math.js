@@ -13,6 +13,8 @@
  return {revenue,productCost,marketplaceFees,logistics,netJumia:revenue-marketplaceFees,profit:revenue-marketplaceFees-productCost-logistics,forecast:forecast-logistics};
  }
  function jumiaSummary(orders){return orders.filter(o=>o.active!==false).reduce((s,o)=>{const t=jumiaOrderTotals(o);for(const key of Object.keys(t))s[key]+=t[key];s.count++;return s;},{revenue:0,productCost:0,marketplaceFees:0,logistics:0,netJumia:0,profit:0,forecast:0,count:0});}
+ function jumiaCustomers(orders){const groups=new Map(),normal=v=>String(v||'').trim().replace(/\s+/g,' ').toLowerCase();for(const o of orders){if(o.active===false||!o.lines.some(l=>l.status==='Livré'))continue;const key=o.customer?.trim()?JSON.stringify([normal(o.customer),normal(o.address)]):'unknown:'+o.id;const g=groups.get(key)||{key,name:o.customer?.trim()||'Client non renseigné',address:o.address||'',orders:[],amount:0,lastDate:''};g.orders.push(o);g.amount+=o.lines.filter(l=>l.status==='Livré').reduce((sum,l)=>sum+Math.round(l.salePrice*100)*l.qty,0);if(o.date>g.lastDate)g.lastDate=o.date;groups.set(key,g);}return [...groups.values()].sort((a,b)=>b.lastDate.localeCompare(a.lastDate));}
+ root.jumiaCustomers=jumiaCustomers;
  root.jumiaStatuses=jumiaStatuses;root.jumiaStockLines=jumiaStockLines;root.jumiaOrderTotals=jumiaOrderTotals;root.jumiaSummary=jumiaSummary;
- if(typeof module!=='undefined'&&module.exports)module.exports={jumiaStatuses,jumiaStockLines,jumiaOrderTotals,jumiaSummary};
+ if(typeof module!=='undefined'&&module.exports)module.exports={jumiaCustomers,jumiaStatuses,jumiaStockLines,jumiaOrderTotals,jumiaSummary};
 })(globalThis);
