@@ -2,7 +2,7 @@ const {parseJumiaCSV,parseCSV}=require('./public/jumia-import');
 const crypto=require('node:crypto');const {auditRecord}=require('./record-admin');const {jumiaStatuses,jumiaStockLines}=require('./public/jumia-math');
 const validDate=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.isNaN(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v;
 const money=(v,name,nullable=false)=>{if(nullable&&(v===null||v===''||v===undefined))return null;if(!Number.isFinite(v)||v<0||!Number.isSafeInteger(Math.round(v*100))||Math.abs(v*100-Math.round(v*100))>0.00001)throw Error(name+' invalide');return v;};
-function handleJumia({db,body,user,list,save,kind,outerTransaction=false}){
+function handleJumia({db,body,user,list,save,kind,outerTransaction=false,allowStockShortage=false}){
  if(!outerTransaction)db.exec('BEGIN IMMEDIATE');try{
  if(kind==='jumiaCategories'&&body.action==='import'){
  if(user.role!=='admin')throw Error('Import réservé aux administrateurs');const rows=parseCSV(body.csv,2*1024*1024,10000,';');if(!('CATEGORIES' in rows[0]))throw Error('Colonne CATEGORIES attendue');const categories=list(kind),seen=new Set();let created=0,updated=0;
@@ -74,7 +74,7 @@ function handleJumia({db,body,user,list,save,kind,outerTransaction=false}){
  }
  if(kind==='jumiaOrders'){
  const delta=new Map();for(const [id,q] of jumiaStockLines(old||{lines:[]}))delta.set(id,(delta.get(id)||0)-q);for(const [id,q] of jumiaStockLines(updated))delta.set(id,(delta.get(id)||0)+q);
- for(const [id,q] of delta){const product=list('products').find(p=>p.id===id);if(!product||product.stock+q<0)throw Error('Stock insuffisant : '+(product?.name||id));}
+ for(const [id,q] of delta){const product=list('products').find(p=>p.id===id);if(!product||(!allowStockShortage&&q<0&&product.stock+q<0))throw Error('Stock insuffisant : '+(product?.name||id));}
  updated.history=[...(old?.history||[]),{at:new Date().toISOString(),by:user.name,reason:body.reason||'Commande saisie',statuses:updated.lines.map(l=>({lineId:l.lineId,name:l.name,status:l.status}))}];
  }
  updated.createdAt=old?.createdAt||new Date().toISOString();updated.createdBy=old?.createdBy||user.name;updated.updatedAt=new Date().toISOString();updated.updatedBy=user.name;
