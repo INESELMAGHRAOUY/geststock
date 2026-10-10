@@ -1,9 +1,15 @@
-const {parseJumiaCSV}=require('./public/jumia-import');
+const {parseJumiaCSV,parseCSV}=require('./public/jumia-import');
 const crypto=require('node:crypto');const {auditRecord}=require('./record-admin');const {jumiaStatuses,jumiaStockLines}=require('./public/jumia-math');
 const validDate=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.isNaN(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v;
 const money=(v,name,nullable=false)=>{if(nullable&&(v===null||v===''||v===undefined))return null;if(!Number.isFinite(v)||v<0||!Number.isSafeInteger(Math.round(v*100))||Math.abs(v*100-Math.round(v*100))>0.00001)throw Error(name+' invalide');return v;};
 function handleJumia({db,body,user,list,save,kind,outerTransaction=false}){
  if(!outerTransaction)db.exec('BEGIN IMMEDIATE');try{
+ if(kind==='jumiaCategories'&&body.action==='import'){
+ if(user.role!=='admin')throw Error('Import réservé aux administrateurs');const rows=parseCSV(body.csv,2*1024*1024,10000,';');if(!('CATEGORIES' in rows[0]))throw Error('Colonne CATEGORIES attendue');const categories=list(kind),seen=new Set();let created=0,updated=0;
+ for(const row of rows){const match=row.CATEGORIES.match(/^(\d+)\s*-\s*(.+)$/);if(!match)throw Error('Catégorie invalide : code - chemin attendu');const [,code,name]=match;if(seen.has(code))throw Error('Code catégorie dupliqué dans le CSV');seen.add(code);const old=categories.find(c=>c.code===code||(!c.code&&c.name.toLowerCase()===name.toLowerCase()));const record={...(old||{}),code,name,active:old?.active!==false,updatedAt:new Date().toISOString(),updatedBy:user.name};const id=save(kind,record,old?.id);if(old){auditRecord(db,kind,old,{...record,id},user,'Modification','Import catégories Jumia');updated++;}else created++;}
+ if(!outerTransaction)db.exec('COMMIT');return {created,updated,count:rows.length};
+ }
+
  if(body.action==='delivery')body.reason='Résultat de livraison';
  if(body.action==='ready')body.reason='Commande prête à expédier';if(body.action==='ship')body.reason='Commande expédiée';
  const old=body.id!==undefined?list(kind).find(o=>o.id===body.id):null;if(body.id!==undefined&&!old)throw Error('Élément Jumia introuvable');
@@ -27,7 +33,7 @@ function handleJumia({db,body,user,list,save,kind,outerTransaction=false}){
  const transactions=parseJumiaCSV(body.csv);const existing=new Set(list(kind).filter(r=>r.active!==false&&r.storeId===store.id).flatMap(r=>r.transactions.map(t=>t['Transaction Number'])));if(transactions.some(t=>existing.has(t['Transaction Number'])))throw Error('Ce fichier contient des transactions déjà importées dans cette boutique');
  updated={storeId:store.id,storeName:store.name,fileName:String(body.fileName||'Export Jumia.csv').slice(0,200),transactions,active:true};
  }else if(kind==='jumiaCategories'){
- if(user.role!=='admin')throw Error('Gestion des catégories réservée aux administrateurs');if(typeof body.name!=='string'||!body.name.trim()||body.name.length>150)throw Error('Nom de catégorie obligatoire');if(list(kind).some(c=>c.id!==old?.id&&c.name.toLowerCase()===body.name.trim().toLowerCase()))throw Error('Cette catégorie existe déjà');updated={name:body.name.trim(),active:old?.active!==false};
+ if(user.role!=='admin')throw Error('Gestion des catégories réservée aux administrateurs');if(typeof body.name!=='string'||!body.name.trim()||body.name.length>1000)throw Error('Nom de catégorie obligatoire');if(list(kind).some(c=>c.id!==old?.id&&c.name.toLowerCase()===body.name.trim().toLowerCase()))throw Error('Cette catégorie existe déjà');updated={code:old?.code||'',name:body.name.trim(),active:old?.active!==false};
  }else if(kind==='jumiaHubs'){
  if(user.role!=='admin')throw Error('Gestion des hubs réservée aux administrateurs');
  if(typeof body.name!=='string'||!body.name.trim()||typeof body.city!=='string'||!body.city.trim())throw Error('Nom et ville du hub obligatoires');
