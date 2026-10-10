@@ -21,6 +21,7 @@ function applyReturns({db,item,body,user,list,save}){
  if(prior.commissionActual===null||prior.commissionActual===undefined){returned.commissionActual=Math.round(cents(prior.salePrice)*part.qty*prior.commissionPercent/100)/100;}
  lines.splice(index,1,...(remainder.qty?[remainder,returned]:[returned]));
  }}
- const now=new Date().toISOString(),updated={...old,lines,updatedAt:now,updatedBy:user.name,history:[...(old.history||[]),{at:now,by:user.name,reason:'Retour client confirmé depuis export Jumia',statuses:lines.map(l=>({lineId:l.lineId,name:l.name,status:l.status}))}]};save('jumiaOrders',updated,old.id);auditRecord(db,'jumiaOrders',old,updated,user,'Modification','Retour client : état et indemnisation confirmés');
+ const costs={...(old.costs||{})};if(!old.lines.some(l=>['La livraison a échoué','Retourné'].includes(l.status)))costs.returnTransport=costs.returnTransport>0?costs.returnTransport:20;
+ const now=new Date().toISOString(),updated={...old,lines,costs,updatedAt:now,updatedBy:user.name,history:[...(old.history||[]),{at:now,by:user.name,reason:'Retour client confirmé depuis export Jumia',statuses:lines.map(l=>({lineId:l.lineId,name:l.name,status:l.status}))}]};save('jumiaOrders',updated,old.id);auditRecord(db,'jumiaOrders',old,updated,user,'Modification','Retour client : état et indemnisation confirmés');
 }
 module.exports={previewReturns,applyReturns};

@@ -76,7 +76,7 @@ function handleJumia({db,body,user,list,save,kind,outerTransaction=false,allowSt
  updated={storeId:store.id,storeName:store.name,hubId:hub?.id||null,hubName:hub?.name||'',hubCity:hub?.city||'',hubAddress:hub?.address||'',number:body.number.trim(),date:body.date,customer:String(body.customer||''),address:String(body.address||''),paymentMethod:String(body.paymentMethod||'À la livraison'),shippingMethod:String(body.shippingMethod||'Dropshipping'),tracking:String(body.tracking||''),notes:String(body.notes||''),lines,costs,active:old?.active!==false};
  }
  if(kind==='jumiaOrders'){
- if(updated.lines.some(l=>l.status==='La livraison a échoué')&&!old?.lines.some(l=>l.status==='La livraison a échoué'))updated.costs={...updated.costs,returnTransport:body.costs?.returnTransport>0?body.costs.returnTransport:20};
+ if(updated.lines.some(l=>['La livraison a échoué','Retourné'].includes(l.status))&&!old?.lines.some(l=>['La livraison a échoué','Retourné'].includes(l.status)))updated.costs={...updated.costs,returnTransport:body.costs?.returnTransport>0?body.costs.returnTransport:20};
  const delta=new Map();for(const [id,q] of jumiaStockLines(old||{lines:[]}))delta.set(id,(delta.get(id)||0)-q);for(const [id,q] of jumiaStockLines(updated))delta.set(id,(delta.get(id)||0)+q);
  for(const [id,q] of delta){const product=list('products').find(p=>p.id===id);if(!product||(!allowStockShortage&&q<0&&product.stock+q<0))throw Error('Stock insuffisant : '+(product?.name||id));}
  updated.history=[...(old?.history||[]),{at:new Date().toISOString(),by:user.name,reason:body.reason||'Commande saisie',statuses:updated.lines.map(l=>({lineId:l.lineId,name:l.name,status:l.status}))}];
