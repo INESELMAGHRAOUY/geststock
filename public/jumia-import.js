@@ -1,10 +1,10 @@
 (function(root){
-function parseCSV(text){
- if(typeof text!=='string'||text.length>2*1024*1024)throw Error('CSV : maximum 2 Mo');
+function parseCSV(text,maxSize=2*1024*1024,maxRows=10000){
+ if(typeof text!=='string'||text.length>maxSize)throw Error('CSV : maximum 2 Mo');
  text=text.replace(/^\uFEFF/,'');const delimiter=text.slice(0,text.indexOf('\n')).includes(';')?';':',';const rows=[];let row=[],cell='',quoted=false;
  for(let i=0;i<text.length;i++){const c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){cell+='"';i++;}else if(quoted||!cell)quoted=!quoted;else throw Error('CSV mal formé');}else if(!quoted&&(c===delimiter||c==='\n'||c==='\r')){row.push(cell);cell='';if(c!==delimiter){if(c==='\r'&&text[i+1]==='\n')i++;if(row.some(v=>v.trim()))rows.push(row);row=[];}}else cell+=c;}
  if(quoted)throw Error('CSV : guillemets incomplets');row.push(cell);if(row.some(v=>v.trim()))rows.push(row);
- const headers=rows.shift()?.map(h=>h.trim());if(!headers||!rows.length||rows.length>10000)throw Error('CSV vide ou plus de 10 000 lignes');return rows.map((r,i)=>{if(r.length!==headers.length)throw Error('Nombre de colonnes invalide : ligne '+(i+2));return Object.fromEntries(headers.map((h,j)=>[h,r[j].trim()]));});
+ const headers=rows.shift()?.map(h=>h.trim());if(!headers||!rows.length||rows.length>maxRows)throw Error('CSV vide ou plus de 10 000 lignes');return rows.map((r,i)=>{if(r.length!==headers.length)throw Error('Nombre de colonnes invalide : ligne '+(i+2));return Object.fromEntries(headers.map((h,j)=>[h,r[j].trim()]));});
 }
 function parseJumiaCSV(text){const raw=parseCSV(text);const required=['Transaction Date','Transaction Type','Transaction Number','Transaction State','Seller SKU','Amount','Paid Status','Order No.','Order Item No.','Country Code'];if(required.some(h=>!(h in raw[0])))throw Error('Export transactions Jumia attendu : colonnes manquantes');const seen=new Set();return raw.map(t=>{if(t['Country Code']!=='MA')throw Error('Seuls les relevés Morocco / MAD sont acceptés');const amount=t.Amount.replace(/\s/g,'').replace(',','.');if(!/^-?\d+(\.\d{1,2})?$/.test(amount))throw Error('Montant invalide');t.amountCents=Math.round(Number(amount)*100);if(!Number.isSafeInteger(t.amountCents)||!t['Transaction Number']||seen.has(t['Transaction Number']))throw Error('Transaction invalide ou dupliquée dans le fichier');seen.add(t['Transaction Number']);return t;});}
 

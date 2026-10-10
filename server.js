@@ -1,3 +1,4 @@
+const {setupBrands,handleBrands}=require('./brands');
 const {handleOrderImport}=require('./jumia-order-import');
 const http = require('node:http');
 const fs = require('node:fs');
@@ -45,6 +46,7 @@ function revokeUser(id){for(const [key,session] of sessions) if(session.userId==
 setupRecurring(db);
 syncRecurring(db);
 setInterval(()=>{try{syncRecurring(db);}catch(e){console.error('Charges périodiques :',e.message);}},60*1000).unref();
+setupBrands(db);
 db.exec('CREATE TABLE IF NOT EXISTS product_images(id INTEGER PRIMARY KEY,name TEXT NOT NULL,mime TEXT NOT NULL,content BLOB NOT NULL)');
 db.exec('CREATE TABLE IF NOT EXISTS payment_attachments(id INTEGER PRIMARY KEY,name TEXT NOT NULL,mime TEXT NOT NULL,content BLOB NOT NULL)');
 db.exec('CREATE TABLE IF NOT EXISTS expense_lifecycle_history(id INTEGER PRIMARY KEY,expense_id INTEGER NOT NULL,action TEXT NOT NULL,reason TEXT NOT NULL,actor TEXT NOT NULL,at TEXT NOT NULL,snapshot TEXT NOT NULL)');
@@ -138,7 +140,8 @@ const server=http.createServer(async(req,res)=>{
  return res.end(Buffer.from(attachment.content));
  }
  if(req.method==='GET' && url.pathname==='/api/state'){syncRecurring(db);return res.end(JSON.stringify(Object.fromEntries([...kinds.map(k=>[k,list(k)]),['recurringCharges',db.prepare('SELECT * FROM recurring_charges ORDER BY id').all().map(x=>({id:x.id,label:x.label,category:x.category,amount:x.amount_cents/100,active:!!x.active,startMonth:x.start_month,lastMonth:x.last_month,supplierId:x.supplier_id||null,supplierName: list('suppliers').find(s=>s.id===x.supplier_id)?.name||''}))],['expenseLifecycleHistory',currentUser.role==='admin'?db.prepare('SELECT id,expense_id AS expenseId,action,reason,actor,at,snapshot FROM expense_lifecycle_history ORDER BY id DESC').all().map(x=>({...x,snapshot:JSON.parse(x.snapshot)})):[]],['recordAudit',currentUser.role==='admin'?db.prepare('SELECT id,kind,record_id AS recordId,action,actor,at,reason,before_data,after_data FROM record_audit ORDER BY id DESC').all().map(x=>({...x,before:JSON.parse(x.before_data),after:JSON.parse(x.after_data),before_data:undefined,after_data:undefined})):[]],['currentUser',publicUser(currentUser)],['users',currentUser.role==='admin'?db.prepare('SELECT id,username,name,role,active FROM users ORDER BY id').all().map(publicUser):[]],['settings',JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data || '{}')]])));}
- let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>(url.pathname==='/api/expensePayments'?7500000:url.pathname==='/api/products'?4500000:['/api/jumiaReports','/api/jumiaOrderImports'].includes(url.pathname)?4500000:1000000))throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');let productImage=null;
+ if(req.method==='GET'&&url.pathname==='/api/jumiaBrands'){const q=(url.searchParams.get('q')||'').trim();const rows=q.length>=3?db.prepare('SELECT * FROM jumia_brands WHERE name LIKE ? OR code=? ORDER BY name LIMIT 50').all('%'+q.replace(/[\\%_]/g,'')+'%',q):[];return res.end(JSON.stringify({rows,total:db.prepare('SELECT COUNT(*) AS n FROM jumia_brands').get().n}));}
+ let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>(url.pathname==='/api/jumiaBrands'?17000000:url.pathname==='/api/expensePayments'?7500000:url.pathname==='/api/products'?4500000:['/api/jumiaReports','/api/jumiaOrderImports'].includes(url.pathname)?4500000:1000000))throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');let productImage=null;
  if(url.pathname==='/api/users' && req.method==='POST') {
  if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}
  const existing=body.id?db.prepare('SELECT * FROM users WHERE id=?').get(Number(body.id)):null;
@@ -173,6 +176,7 @@ const server=http.createServer(async(req,res)=>{
  }
  const kind=url.pathname.split('/')[2];if(kind==='settings'){if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(body));return res.end('{}');}
  if(kind==='jumiaOrderImports'){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleOrderImport({db,body,user:currentUser,list,save})));}
+ if(kind==='jumiaBrands'){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleBrands(db,body,currentUser)));}
  if(!kinds.includes(kind)&&kind!=='adminRecords')throw Error('Module inconnu');
  if(['jumiaStores','jumiaOrders','jumiaHubs','jumiaReports','jumiaCategories'].includes(kind)){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleJumia({db,body,user:currentUser,list,save,kind})));}
  if(kind==='accountOpenings'){
