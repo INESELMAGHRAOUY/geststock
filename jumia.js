@@ -20,7 +20,6 @@ function handleJumia({db,body,user,list,save,kind,outerTransaction=false,allowSt
  updated={...old,lines:old.lines.map(l=>l.status==='En attente'?{...l,status:'Prêt à expédier'}:l)};
  }else if(body.action==='ship'){
  if(kind!=='jumiaOrders'||!old||old.active===false||!old.lines.some(l=>l.status==='Prêt à expédier'))throw Error('Aucune ligne prête à expédier');
- if(old.lines.some(l=>l.status==='Prêt à expédier'&&!l.productId))throw Error('Reliez les listings au stock avant l’expédition');
  updated={...old,lines:old.lines.map(l=>l.status==='Prêt à expédier'?{...l,status:'Expédié',dispatched:true,returnedToStock:false,purchasePrice:list('products').find(p=>p.id===l.productId)?.lastPurchasePrice??l.purchasePrice,purchaseSourceId:list('products').find(p=>p.id===l.productId)?.purchaseSourceId??l.purchaseSourceId??null}:l)};
  }else if(body.action==='delivery'){
  if(kind!=='jumiaOrders'||!old||old.active===false||!old.lines.some(l=>l.status==='Expédié'))throw Error('Aucune ligne expédiée à mettre à jour');
@@ -59,8 +58,8 @@ function handleJumia({db,body,user,list,save,kind,outerTransaction=false,allowSt
  if(!Array.isArray(body.lines)||!body.lines.length||body.lines.length>200)throw Error('Ajoutez des produits à la commande');
  const seen=new Set();const lines=body.lines.map(l=>{
  const prior=old?.lines.find(p=>p.lineId===l.lineId);const product=l.productId?list('products').find(p=>p.id===l.productId):null;
- if((!product&&!(allowStockShortage&&!l.productId))||product?.active===false)throw Error('Enregistrez cet article et son achat dans le stock avant la commande Jumia');
  const listing=l.listingId?store.listings?.find(p=>p.id===l.listingId):null;
+ if((!product&&!(!l.productId&&listing&&!listing.productId))||product?.active===false)throw Error('Choisissez un produit stock ou un listing de cette boutique à relier');
  if(l.listingId&&(!listing||(listing.productId||null)!==(product?.id||null)||(listing.active===false&&prior?.listingId!==listing.id)))throw Error('Listing indisponible dans cette boutique');
  const name=String(l.name||product?.name||'').trim();if(!name||!Number.isSafeInteger(l.qty)||l.qty<=0||!jumiaStatuses.includes(l.status))throw Error('Produit, quantité ou statut invalide');
  const percent=l.commissionPercent??prior?.commissionPercent??listing?.commissionPercent??product?.jumiaCommissionPercent??store.commissionPercent;if(!Number.isFinite(percent)||percent<0||percent>100)throw Error('Commission invalide');

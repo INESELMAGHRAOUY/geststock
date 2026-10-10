@@ -24,7 +24,7 @@ test('multi-store Jumia orders, delivery profitability, purchase-stock shipping 
  edit({lines:o.lines.map(l=>({...l,status:'Livré',returnedToStock:false}))});o=list('jumiaOrders').find(o=>o.id===id);let t=jumiaOrderTotals(o);assert.equal(t.revenue,29900);assert.equal(t.productCost,15000);assert.equal(t.marketplaceFees,4190);assert.equal(t.logistics,4000);assert.equal(t.profit,6710);
  edit({lines:o.lines.map((l,i)=>i===0?{...l,status:'Retourné',returnedToStock:true}:l)});o=list('jumiaOrders').find(o=>o.id===id);t=jumiaOrderTotals(o);assert.equal(t.revenue,10000);assert.equal(list('products').find(p=>p.id===p1).stock,2);assert.equal(list('products').find(p=>p.id===p2).stock,0);
  run('jumiaOrders',{id,expectedRecord:JSON.stringify(o),action:'setActive',active:false,reason:'Archive'});assert.equal(list('products').find(p=>p.id===p2).stock,1);assert.equal(jumiaSummary(list('jumiaOrders')).count,1);
- assert.throws(()=>run('jumiaOrders',{...body,number:'UNLINKED',lines:[{...line(null,'A','En attente')}]}),/Enregistrez/);db.close();
+ assert.throws(()=>run('jumiaOrders',{...body,number:'UNLINKED',lines:[{...line(null,'A','En attente')}]}),/Choisissez un produit stock/);db.close();
 });
 test('store listings support multiple seller SKUs for one stock product and preserve historical SKUs',()=>{
  const db=new DatabaseSync(':memory:');db.exec('CREATE TABLE records(id INTEGER PRIMARY KEY,kind TEXT,data TEXT)');setupRecordAudit(db);
