@@ -1,7 +1,7 @@
 (function(root){
  const jumiaStatuses=['En attente','Prêt à expédier','Expédié','Livré','Annulé','La livraison a échoué','Retourné'];
  const cents=n=>Math.round(Number(n||0)*100);
- function jumiaStockLines(order){if(order.active===false)return [];return order.lines.filter(l=>l.fromStock&&l.dispatched&&!l.returnedToStock&&!(l.status==='La livraison a échoué'&&!l.lost)).map(l=>[l.productId,-l.qty]);}
+ function jumiaStockLines(order){if(order.active===false)return [];return order.lines.filter(l=>l.productId&&l.fromStock&&l.dispatched&&!l.returnedToStock&&!(l.status==='La livraison a échoué'&&!l.lost)).map(l=>[l.productId,-l.qty]);}
  function jumiaOrderTotals(order){
  let revenue=0,productCost=0,marketplaceFees=0,forecast=0;
  for(const l of order.lines){const gross=cents(l.salePrice)*l.qty,buy=cents(l.purchasePrice)*l.qty,fees=l.commissionActual!==null&&l.commissionActual!==undefined?cents(l.commissionActual):(l.status==='Livré'?Math.round(gross*l.commissionPercent/100):0);
