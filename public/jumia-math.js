@@ -9,7 +9,7 @@
  marketplaceFees+=fees+cents(l.shippingContribution)*l.qty+cents(l.otherFees)-cents(l.refundCredit);
  if(!['Annulé','Retourné','La livraison a échoué'].includes(l.status))forecast+=gross-buy-(l.commissionActual!==null&&l.commissionActual!==undefined?cents(l.commissionActual):Math.round(gross*l.commissionPercent/100))-cents(l.shippingContribution)*l.qty-cents(l.otherFees)+cents(l.refundCredit);
  }
- const c=order.costs||{},logistics=cents(c.supplierTransport)+cents(c.hubTransport)+Math.round(c.ticketQty*cents(c.ticketUnitPrice))+Math.round(c.saltKg*cents(c.saltUnitPrice))+Math.round(c.cartonQty*cents(c.cartonUnitPrice))+cents(c.other);
+ const c=order.costs||{},failed=order.lines.some(l=>l.status==='La livraison a échoué'),allFailed=order.lines.length>0&&order.lines.every(l=>l.status==='La livraison a échoué'),logistics=cents(c.returnTransport??(failed?20:0))+cents(c.supplierTransport)+cents(c.hubTransport)+Math.round(c.ticketQty*cents(c.ticketUnitPrice))+(allFailed?0:Math.round((c.saltKg||0)*cents(c.saltUnitPrice)))+Math.round(c.cartonQty*cents(c.cartonUnitPrice))+cents(c.other);
  return {revenue,productCost,marketplaceFees,logistics,netJumia:revenue-marketplaceFees,profit:revenue-marketplaceFees-productCost-logistics,forecast:forecast-logistics};
  }
  function jumiaSummary(orders){return orders.filter(o=>o.active!==false).reduce((s,o)=>{const t=jumiaOrderTotals(o);for(const key of Object.keys(t))s[key]+=t[key];s.count++;return s;},{revenue:0,productCost:0,marketplaceFees:0,logistics:0,netJumia:0,profit:0,forecast:0,count:0});}

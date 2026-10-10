@@ -21,7 +21,7 @@ test('multi-store Jumia orders, delivery profitability, purchase-stock shipping 
  run('jumiaOrders',{id,expectedRecord:JSON.stringify(o),action:'delivery',results:o.lines.map((l,i)=>({lineId:l.lineId,status:i===0?'Livré':'La livraison a échoué'}))});
  o=list('jumiaOrders').find(o=>o.id===id);assert.equal(jumiaOrderTotals(o).revenue,19900);assert.equal(list('products').find(p=>p.id===p2).stock,1);assert.equal(o.lines[1].status,'La livraison a échoué');assert.equal(o.history.at(-1).reason,'Résultat de livraison');
  assert.throws(()=>run('jumiaOrders',{id,expectedRecord:JSON.stringify(o),action:'delivery',results:[]}),/Aucune ligne/);
- edit({lines:o.lines.map(l=>({...l,status:'Livré',returnedToStock:false}))});o=list('jumiaOrders').find(o=>o.id===id);let t=jumiaOrderTotals(o);assert.equal(t.revenue,29900);assert.equal(t.productCost,15000);assert.equal(t.marketplaceFees,4190);assert.equal(t.logistics,2000);assert.equal(t.profit,8710);
+ edit({lines:o.lines.map(l=>({...l,status:'Livré',returnedToStock:false}))});o=list('jumiaOrders').find(o=>o.id===id);let t=jumiaOrderTotals(o);assert.equal(t.revenue,29900);assert.equal(t.productCost,15000);assert.equal(t.marketplaceFees,4190);assert.equal(t.logistics,4000);assert.equal(t.profit,6710);
  edit({lines:o.lines.map((l,i)=>i===0?{...l,status:'Retourné',returnedToStock:true}:l)});o=list('jumiaOrders').find(o=>o.id===id);t=jumiaOrderTotals(o);assert.equal(t.revenue,10000);assert.equal(list('products').find(p=>p.id===p1).stock,2);assert.equal(list('products').find(p=>p.id===p2).stock,0);
  run('jumiaOrders',{id,expectedRecord:JSON.stringify(o),action:'setActive',active:false,reason:'Archive'});assert.equal(list('products').find(p=>p.id===p2).stock,1);assert.equal(jumiaSummary(list('jumiaOrders')).count,1);
  assert.throws(()=>run('jumiaOrders',{...body,number:'UNLINKED',lines:[{...line(null,'A','En attente')}]}),/Enregistrez/);db.close();
@@ -54,4 +54,11 @@ test('Jumia shipping contribution is charged for every unit sold',()=>{
 });
 test('Jumia customers aggregate delivered purchases by name and address including failed and canceled orders',()=>{
  const {jumiaCustomers}=require('../public/jumia-math');const make=(id,customer,address,status,active=true)=>({id,customer,address,active,date:'2026-10-10',storeId:id,lines:[{status,qty:2,salePrice:100}]});const customers=jumiaCustomers([make(1,'Client A','Address','Livré'),make(2,' client a ','Address','Livré'),make(3,'Client A','Other address','Livré'),make(4,'Client B','Address','Annulé'),make(5,'Client C','Address','Livré',false),make(6,'','','Livré'),make(7,'','','Livré')]);assert.equal(customers.length,5);assert.equal(customers[0].orders.length,2);assert.equal(customers[0].amount,40000);assert.equal(customers.filter(c=>c.name==='Client non renseigné').length,2);
+});
+
+test('failed deliveries count return transport, ticket and carton, excluding salt',()=>{
+ const order={lines:[{qty:1,status:'La livraison a échoué',salePrice:199,purchasePrice:75,commissionPercent:15,shippingContribution:0}],costs:{supplierTransport:0,hubTransport:20,ticketQty:1,ticketUnitPrice:1,saltKg:1,saltUnitPrice:2,cartonQty:1,cartonUnitPrice:2,other:0}};
+ assert.equal(jumiaOrderTotals(order).logistics,4300);assert.equal(jumiaOrderTotals(order).profit,-4300);
+ order.costs.returnTransport=30;assert.equal(jumiaOrderTotals(order).logistics,5300);
+ order.costs.returnTransport=0;assert.equal(jumiaOrderTotals(order).logistics,2300);
 });
