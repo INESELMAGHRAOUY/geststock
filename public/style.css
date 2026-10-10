@@ -25,3 +25,5 @@ aside{overflow-y:auto}aside nav{display:block;margin:24px -22px}aside nav button
 .product-thumbnail{width:54px;height:54px;object-fit:contain;border-radius:8px}.product-image-preview{max-width:180px;max-height:180px;object-fit:contain;border-radius:8px}
 
 .product-name-button{background:transparent;color:inherit;text-align:left;padding:0;border:0;font:inherit;line-height:inherit}.product-name-button:hover{background:transparent;color:#087f83;text-decoration:underline}
+
+.product-search-bar{display:flex;gap:0;padding:14px;background:#22a399;border-radius:8px;margin:16px 0 24px;align-items:stretch}.product-search-bar input{flex:1;min-width:0;border-radius:4px 0 0 4px}.product-search-bar button{border-radius:0 4px 4px 0;white-space:nowrap}
