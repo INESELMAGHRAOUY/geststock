@@ -45,6 +45,7 @@ function revokeUser(id){for(const [key,session] of sessions) if(session.userId==
 setupRecurring(db);
 syncRecurring(db);
 setInterval(()=>{try{syncRecurring(db);}catch(e){console.error('Charges périodiques :',e.message);}},60*1000).unref();
+db.exec('CREATE TABLE IF NOT EXISTS product_images(id INTEGER PRIMARY KEY,name TEXT NOT NULL,mime TEXT NOT NULL,content BLOB NOT NULL)');
 db.exec('CREATE TABLE IF NOT EXISTS payment_attachments(id INTEGER PRIMARY KEY,name TEXT NOT NULL,mime TEXT NOT NULL,content BLOB NOT NULL)');
 db.exec('CREATE TABLE IF NOT EXISTS expense_lifecycle_history(id INTEGER PRIMARY KEY,expense_id INTEGER NOT NULL,action TEXT NOT NULL,reason TEXT NOT NULL,actor TEXT NOT NULL,at TEXT NOT NULL,snapshot TEXT NOT NULL)');
 setupRecordAudit(db);
@@ -128,6 +129,7 @@ const server=http.createServer(async(req,res)=>{
  }
  if(url.pathname.startsWith('/api/')){
  res.setHeader('Content-Type','application/json');
+ if(req.method==='GET'&&/^\/api\/product-images\/\d+$/.test(url.pathname)){const im=db.prepare('SELECT * FROM product_images WHERE id=?').get(Number(url.pathname.split('/')[3]));if(!im){res.writeHead(404);return res.end();}res.setHeader('Content-Type',im.mime);return res.end(Buffer.from(im.content));}
  if(req.method==='GET' && /^\/api\/attachments\/\d+$/.test(url.pathname)){
  const attachment=db.prepare('SELECT * FROM payment_attachments WHERE id=?').get(Number(url.pathname.split('/')[3]));
  if(!attachment){res.writeHead(404);return res.end('{}');}
@@ -136,7 +138,7 @@ const server=http.createServer(async(req,res)=>{
  return res.end(Buffer.from(attachment.content));
  }
  if(req.method==='GET' && url.pathname==='/api/state'){syncRecurring(db);return res.end(JSON.stringify(Object.fromEntries([...kinds.map(k=>[k,list(k)]),['recurringCharges',db.prepare('SELECT * FROM recurring_charges ORDER BY id').all().map(x=>({id:x.id,label:x.label,category:x.category,amount:x.amount_cents/100,active:!!x.active,startMonth:x.start_month,lastMonth:x.last_month,supplierId:x.supplier_id||null,supplierName: list('suppliers').find(s=>s.id===x.supplier_id)?.name||''}))],['expenseLifecycleHistory',currentUser.role==='admin'?db.prepare('SELECT id,expense_id AS expenseId,action,reason,actor,at,snapshot FROM expense_lifecycle_history ORDER BY id DESC').all().map(x=>({...x,snapshot:JSON.parse(x.snapshot)})):[]],['recordAudit',currentUser.role==='admin'?db.prepare('SELECT id,kind,record_id AS recordId,action,actor,at,reason,before_data,after_data FROM record_audit ORDER BY id DESC').all().map(x=>({...x,before:JSON.parse(x.before_data),after:JSON.parse(x.after_data),before_data:undefined,after_data:undefined})):[]],['currentUser',publicUser(currentUser)],['users',currentUser.role==='admin'?db.prepare('SELECT id,username,name,role,active FROM users ORDER BY id').all().map(publicUser):[]],['settings',JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data || '{}')]])));}
- let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>(url.pathname==='/api/expensePayments'?7500000:['/api/jumiaReports','/api/jumiaOrderImports'].includes(url.pathname)?4500000:1000000))throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');
+ let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>(url.pathname==='/api/expensePayments'?7500000:url.pathname==='/api/products'?4500000:['/api/jumiaReports','/api/jumiaOrderImports'].includes(url.pathname)?4500000:1000000))throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');let productImage=null;
  if(url.pathname==='/api/users' && req.method==='POST') {
  if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}
  const existing=body.id?db.prepare('SELECT * FROM users WHERE id=?').get(Number(body.id)):null;
@@ -278,6 +280,9 @@ const server=http.createServer(async(req,res)=>{
  if(req.method==='DELETE')throw Error('Utilisez Désactiver : aucun élément ne doit être supprimé');
  if(req.method!=='POST')throw Error('Méthode non autorisée');
  if(kind==='products'){
+ delete body.imageId;delete body.imageName;
+ if(body.image){const im=body.image;if(typeof im.base64!=='string'||typeof im.name!=='string')throw Error('Image invalide');const bytes=Buffer.from(im.base64,'base64');if(!bytes.length||bytes.length>2*1024*1024||bytes.toString('base64')!==im.base64)throw Error('Image : maximum 2 Mo');const detected=bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))?'image/png':bytes[0]===255&&bytes[1]===216&&bytes[2]===255?'image/jpeg':bytes.subarray(0,4).toString()==='RIFF'&&bytes.subarray(8,12).toString()==='WEBP'?'image/webp':null;if(!detected||detected!==im.mime)throw Error('Image PNG, JPEG ou WebP requise');productImage={name:im.name.slice(0,200),mime:detected,bytes};}delete body.image;
+
  for(const key of ['barcode','sku'])if(body[key]!==undefined&&(typeof body[key]!=='string'||body[key].length>150))throw Error('Code-barres ou SKU vendeur invalide');
  if(body.jumiaCommissionPercent!==undefined&&(!Number.isFinite(body.jumiaCommissionPercent)||body.jumiaCommissionPercent<0||body.jumiaCommissionPercent>100))throw Error('Commission Jumia invalide');
  if(body.purchasePrice!==undefined&&(!Number.isFinite(body.purchasePrice)||body.purchasePrice<0))throw Error('Prix d’achat invalide');
@@ -337,8 +342,9 @@ const server=http.createServer(async(req,res)=>{
  if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès administrateur requis'}));}
  const old=list(kind).find(x=>x.id===body.id);if(!old)throw Error('Élément introuvable');
  const updated={...old,...body,active:old.active!==false,updatedAt:new Date().toISOString(),updatedBy:currentUser.name};delete updated.expectedStock;
- db.exec('BEGIN');try{save(kind,updated,old.id);auditRecord(db,kind,old,updated,currentUser,'Modification','Correction via le formulaire');db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}return res.end(JSON.stringify({id:old.id}));
+ db.exec('BEGIN');try{if(productImage){updated.imageId=Number(db.prepare('INSERT INTO product_images(name,mime,content) VALUES(?,?,?)').run(productImage.name,productImage.mime,productImage.bytes).lastInsertRowid);updated.imageName=productImage.name;}save(kind,updated,old.id);auditRecord(db,kind,old,updated,currentUser,'Modification','Correction via le formulaire');db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}return res.end(JSON.stringify({id:old.id}));
  }
+ if(kind==='products'){db.exec('BEGIN');try{if(productImage){body.imageId=Number(db.prepare('INSERT INTO product_images(name,mime,content) VALUES(?,?,?)').run(productImage.name,productImage.mime,productImage.bytes).lastInsertRowid);body.imageName=productImage.name;}const id=save(kind,{...body,active:true});db.exec('COMMIT');return res.end(JSON.stringify({id}));}catch(e){db.exec('ROLLBACK');throw e;}}
  return res.end(JSON.stringify({id:save(kind,{...body,active:true})}));
  }
  const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js'].includes(file)){res.writeHead(404);return res.end();}
