@@ -1,0 +1,17 @@
+const {jumiaStatements}=require('./public/jumia-import'),{auditRecord}=require('./record-admin');
+const validDate=v=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(v)&&!Number.isNaN(Date.parse(v))&&new Date(v).toISOString().slice(0,10)===v;
+function handleJumiaPayout({db,body,user,list,save}){
+ if(user.role!=='admin')throw Error('Confirmation bancaire réservée aux administrateurs');db.exec('BEGIN IMMEDIATE');try{
+ const old=body.id!==undefined?list('jumiaPayouts').find(p=>p.id===body.id):null;if(body.id!==undefined&&!old)throw Error('Virement introuvable');if(old&&JSON.stringify(old)!==body.expectedRecord)throw Error('Le virement a changé. Rouvrez le formulaire');let updated;
+ if(body.action==='setActive'){if(!old||typeof body.active!=='boolean'||body.active===(old.active!==false)||!body.reason?.trim())throw Error('État et motif obligatoires');if(body.active&&list('jumiaPayouts').some(p=>p.id!==old.id&&p.active!==false&&p.statementKey===old.statementKey))throw Error('Ce relevé a déjà un virement confirmé');updated={...old,active:body.active};
+ }else{
+ const statement=jumiaStatements(list('jumiaReports')).find(s=>s.key===body.statementKey);if(!statement||statement.netCents<=0)throw Error('Relevé actif avec net positif requis');if(JSON.stringify(statement)!==body.expectedStatement)throw Error('Le relevé a changé. Rechargez avant de confirmer');if(old&&(old.statementKey!==statement.key||old.active===false))throw Error('Virement ou relevé indisponible');
+ if(list('jumiaPayouts').some(p=>p.id!==old?.id&&p.active!==false&&(p.statementKey===statement.key||(p.storeId===statement.storeId&&p.transactionNumbers.some(n=>statement.transactionNumbers.includes(n))))))throw Error('Ce relevé ou ses transactions ont déjà été encaissés');
+ const bank=body.bankId?list('banks').find(b=>b.id===body.bankId&&b.active!==false):list('banks').find(b=>b.active!==false&&/attijari/i.test(b.name));if(!bank)throw Error('Sélectionnez une banque active (Attijariwafa bank par défaut)');
+ const amountCents=Math.round(body.amount*100);if(!Number.isFinite(body.amount)||amountCents<=0||!Number.isSafeInteger(amountCents)||Math.abs(body.amount*100-amountCents)>0.00001)throw Error('Montant reçu invalide');if(!validDate(body.date)||body.date>new Date().toISOString().slice(0,10))throw Error('Date réelle de réception invalide');if((old||amountCents!==statement.netCents)&&!body.reason?.trim())throw Error('Expliquez la correction ou l’écart avec le net du relevé');
+ updated={statementKey:statement.key,statementNumber:statement.number,storeId:statement.storeId,storeName:statement.storeName,periodStart:statement.start,periodEnd:statement.end,transactionNumbers:statement.transactionNumbers,expectedCents:statement.netCents,amountCents,amount:amountCents/100,differenceCents:amountCents-statement.netCents,bankId:bank.id,bankName:bank.name,date:body.date,reference:String(body.reference||'').trim(),reason:String(body.reason||'').trim(),method:'Virement',status:'validated',active:true,createdAt:old?.createdAt||new Date().toISOString(),createdBy:old?.createdBy||user.name};
+ }
+ updated.updatedAt=new Date().toISOString();updated.updatedBy=user.name;const id=save('jumiaPayouts',updated,old?.id);auditRecord(db,'jumiaPayouts',old||{id}, {...updated,id},user,old?(body.action==='setActive'?(updated.active?'Réactivation':'Désactivation'):'Modification'):'Confirmation bancaire',body.reason||'Montant Jumia reçu confirmé');db.exec('COMMIT');return {id};
+ }catch(error){db.exec('ROLLBACK');throw error;}
+}
+module.exports={handleJumiaPayout};

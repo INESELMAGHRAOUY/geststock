@@ -12,6 +12,7 @@
  const opening=(state.accountOpenings||[]).find(o=>o.bankId===account.id),start=opening?.date||'0000-00-00';let receipts=0,outgoing=0;
  const accountId=p=>p.method==='Espèces'?0:p.bankId||0;
  for(const p of state.settlements||[])if(p.active!==false&&p.status==='validated'&&accountId(p)===account.id&&(p.clearedDate||p.date)>=start){if(p.side==='client')receipts+=p.amountCents;else outgoing+=p.amountCents;}
+ for(const p of state.jumiaPayouts||[])if(p.active!==false&&p.bankId===account.id&&p.date>=start)receipts+=p.amountCents;
  for(const p of state.expensePayments||[])if(p.active!==false&&(p.method!=='Chèque'||p.status==='validated')&&accountId(p)===account.id&&(p.clearedDate||p.date)>=start)outgoing+=p.amountCents;
  return {...account,opening,receipts,outgoing,balance:(opening?.amountCents||0)+receipts-outgoing};
  });
