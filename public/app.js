@@ -28,7 +28,7 @@ async function load(){const response=await fetch('/api/state');if(response.statu
 document.querySelector('#logout').addEventListener('click',async()=>{try{await api('logout',{});location.replace('/login');}catch(err){$('#notice').textContent=err.message;}});
 const field=(name,label,type='text',value='')=>`<label>${label}<input name="${name}" type="${type}" value="${esc(value)}" ${type==='number'?'min="0" step="0.01"':''}></label>`;
 const options=(kind,label)=>`<option value="">${label}</option>`+state[kind].filter(x=>x.active!==false).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');
-const table=(heads,rows)=>rows.length?`<table><thead><tr>${heads.map(x=>`<th>${x}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map(x=>`<td>${x}</td>`).join('')}</tr>`).join('')}</tbody></table>`:'<div class="empty">Aucune donnée. Ajoutez votre premier élément.</div>';
+const table=(heads,rows)=>rows.length?`<table><thead><tr><th scope="col">N°</th>${heads.map(x=>`<th>${x}</th>`).join('')}</tr></thead><tbody>${rows.map((r,i)=>`<tr><td>${i+1}</td>${r.map(x=>`<td>${x}</td>`).join('')}</tr>`).join('')}</tbody></table>`:'<div class="empty">Aucune donnée. Ajoutez votre premier élément.</div>';
 const del=(kind,id)=>adminRecordActions(kind,id,false);
 function clearEditState(){addingProduct=false;editingUser=editingContact=editingProduct=editingBank=editingRecurring=editingPayment=null;}
 function syncEditModal(){
