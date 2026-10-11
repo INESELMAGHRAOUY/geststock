@@ -1,3 +1,4 @@
+const {handleFuel}=require('./fuel');
 const {handleJumiaPayout}=require('./jumia-payouts');
 const {handleCatalog}=require('./jumia-catalog-import');
 const {setupBrands,handleBrands}=require('./brands');
@@ -177,6 +178,7 @@ const server=http.createServer(async(req,res)=>{
  syncRecurring(db);return res.end('{}');
  }
  const kind=url.pathname.split('/')[2];if(kind==='settings'){if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(body));return res.end('{}');}
+ if(kind==='fuelExpenses'){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleFuel({db,body,user:currentUser,list,save})));}
  if(kind==='jumiaOrderImports'){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleOrderImport({db,body,user:currentUser,list,save})));}
  if(kind==='jumiaBrands'){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleBrands(db,body,currentUser)));}
  if(kind==='jumiaPayouts'){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleJumiaPayout({db,body,user:currentUser,list,save})));}
