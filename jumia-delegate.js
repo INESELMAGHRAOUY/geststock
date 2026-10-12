@@ -1,10 +1,12 @@
 const crypto=require('node:crypto');
+const delegateTokenKey=crypto.randomBytes(32);
+const {previewOrders,handleOrderImport}=require('./jumia-order-import');
 const {handleJumia}=require('./jumia');
 const {jumiaOrderTotals}=require('./public/jumia-math');
 const isJumiaDelegate=user=>user?.role==='user'&&user.access_profile==='jumia_delegate';
 function setupDelegateAccess(db){const columns=new Set(db.prepare('PRAGMA table_info(users)').all().map(c=>c.name));if(!columns.has('access_profile'))db.exec("ALTER TABLE users ADD COLUMN access_profile TEXT NOT NULL DEFAULT 'full'");if(!columns.has('jumia_store_ids'))db.exec("ALTER TABLE users ADD COLUMN jumia_store_ids TEXT NOT NULL DEFAULT '[]'");}
 function assignedStores(user){try{const ids=JSON.parse(user.jumia_store_ids||'[]');return Array.isArray(ids)?ids.filter(Number.isSafeInteger):[];}catch{return [];}}
-const version=record=>crypto.createHash('sha256').update(JSON.stringify(record)).digest('hex');
+const version=record=>crypto.createHmac('sha256',delegateTokenKey).update(JSON.stringify(record)).digest('hex');
 const pick=(record,keys)=>Object.fromEntries(keys.filter(k=>record[k]!==undefined).map(k=>[k,record[k]]));
 function delegateState({user,list,kinds}){const ids=assignedStores(user),products=list('products').filter(p=>p.active!==false),productMap=new Map(products.map(p=>[p.id,p]));return {...Object.fromEntries(kinds.map(k=>[k,[]])),products:products.map(p=>({...pick(p,['id','name','barcode','sku','price','imageId','jumiaCommissionPercent']),available:p.stock>0})),jumiaStores:list('jumiaStores').filter(s=>s.active!==false&&ids.includes(s.id)).map(s=>({...pick(s,['id','name','commissionPercent']),version:version(s),listings:(s.listings||[]).map(l=>({...pick(l,['id','productId','name','sku','jumiaSku','salePriceHT','salePrice','commissionPercent','shippingFee','brandId','brandName','brandCode','categoryId','imageUrl','active']),available:!!productMap.get(l.productId)&&productMap.get(l.productId).stock>0}))})),jumiaOrders:list('jumiaOrders').filter(o=>o.active!==false&&ids.includes(o.storeId)).map(o=>({...pick(o,['id','storeId','storeName','number','date','customer','address','tracking','notes','paymentMethod','shippingMethod']),version:version(o),analysis:(()=>{const t=jumiaOrderTotals(o);return {revenueCents:t.revenue,feesCents:t.marketplaceFees,netCents:t.netJumia};})(),lines:o.lines.map(l=>pick(l,['lineId','listingId','productId','name','sku','jumiaSku','qty','salePrice','status']))})),jumiaCategories:list('jumiaCategories').filter(c=>c.active!==false).map(c=>pick(c,['id','name','code'])),currentUser:{id:user.id,name:user.name,username:user.username,role:'jumia_delegate',active:true,storeIds:ids},users:[],settings:{currency:'MAD'},recurringCharges:[],expenseLifecycleHistory:[],recordAudit:[]};}
 function scopedStore(body,user,list){if(!isJumiaDelegate(user))throw Error('Compte délégué requis');const store=list('jumiaStores').find(s=>s.id===body.storeId&&s.active!==false&&assignedStores(user).includes(s.id));if(!store)throw Error('Boutique non autorisée');return store;}
@@ -17,6 +19,16 @@ function delegateMutation({db,body,user,list,save,kind}){
  db.exec('BEGIN IMMEDIATE');try{const result=handleJumia({db,body:{name:body.name,commissionPercent:body.commissionPercent??15,defaults:{supplierTransport:0,hubTransport:20,ticketUnitPrice:1,saltUnitPrice:2,cartonUnitPrice:2}},user:{...user,role:'admin'},list,save,kind:'jumiaStores',outerTransaction:true});const store=list('jumiaStores').find(s=>s.id===result.id);save('jumiaStores',{...store,delegateOwnerId:user.id},store.id);db.prepare('UPDATE users SET jumia_store_ids=? WHERE id=?').run(JSON.stringify([...assignedStores(user),store.id]),user.id);db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}
  }
  const store=scopedStore(body,user,list);let payload,target;
+ if(kind==='jumiaDelegateImports'){
+ if(!['preview','commit'].includes(body.action))throw Error('Action d’import non autorisée');
+ const request={storeId:store.id,csv:body.csv,fileName:body.fileName},preview=previewOrders(request,list),safeOrders=preview.orders.map(item=>{const returned=item.body.lines.some(l=>l.status==='Retourné');return {number:item.number,qty:item.qty,status:returned?'Retour à valider par administrateur':item.status,errors:returned?['Les retours et indemnisations doivent être confirmés par l’administrateur.']:item.errors.map(error=>error.startsWith('Commande déjà saisie dans une autre boutique')?'Commande non importable ici : contactez l’administrateur.':error),statuses:[...new Set(item.body.lines.map(l=>l.status))],salesCents:item.body.lines.reduce((n,l)=>n+Math.round(l.salePrice*100)*l.qty,0),unlinkedSkus:[...new Set(item.body.lines.filter(l=>l.needsLink).map(l=>l.sku))]};});
+ if(body.action==='preview')return {storeId:store.id,storeName:store.name,fileName:preview.fileName,token:version(preview),orders:safeOrders};
+ if(body.expectedToken!==version(preview))throw Error('Les données ont changé. Refaites la prévisualisation');
+ if(!Array.isArray(body.selectedOrders)||!body.selectedOrders.length||new Set(body.selectedOrders).size!==body.selectedOrders.length||body.selectedOrders.some(number=>!safeOrders.some(o=>o.number===number&&['Nouvelle','Client à compléter'].includes(o.status)&&!o.errors.length)))throw Error('Sélectionnez des commandes importables. Les retours sont réservés à l’administrateur');
+ if(body.confirmedStoreId!==store.id)throw Error('Confirmez la boutique destination');
+ return handleOrderImport({db,body:{...request,action:'commit',confirmedStoreId:store.id,selectedOrders:body.selectedOrders,expectedPreview:JSON.stringify(preview)},user:{...user,role:'admin'},list,save});
+ }
+
  if(kind==='jumiaDelegateListings'){
  if(body.expectedVersion!==version(store))throw Error('Les listings ont changé. Actualisez la page');
  const input=body.listing;if(!input||typeof input!=='object')throw Error('Listing obligatoire');const prior=input.id?store.listings?.find(l=>l.id===input.id):null;if(input.id&&!prior)throw Error('Listing introuvable dans cette boutique');
