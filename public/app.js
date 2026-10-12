@@ -45,8 +45,8 @@ $('#edit-dialog').addEventListener('cancel',e=>{e.preventDefault();clearEditStat
 function showFormError(error,form){$('#notice').textContent=error.message;if(form.closest('#edit-dialog'))$('#edit-dialog-error').textContent=error.message;}
 function render(){
  if(state.currentUser?.role==='jumia_delegate'){
- if(!['jumiaOrders','jumiaListings','jumiaStores','jumiaClients'].includes(page))page='jumiaOrders';
- history.replaceState(null,'','#'+new URLSearchParams({page}).toString());$('#account').textContent=state.currentUser.name;$('#title').textContent=menus[page];$('#nav').innerHTML=[['jumiaOrders','Commandes'],['jumiaListings','Listings'],['jumiaStores','Mes boutiques'],['jumiaClients','Mes clients']].map(([key,label])=>`<button type="button" data-page="${key}" class="nav-link ${page===key?'active':''}">${navIcon}<span>${label}</span></button>`).join('');$('#content').innerHTML=renderJumiaDelegate();syncEditModal();return;
+ if(!['jumiaOrders','jumiaDashboard','jumiaListings','jumiaStores','jumiaClients'].includes(page))page='jumiaOrders';
+ history.replaceState(null,'','#'+new URLSearchParams({page}).toString());$('#account').textContent=state.currentUser.name;$('#title').textContent=menus[page];$('#nav').innerHTML=[['jumiaOrders','Commandes'],['jumiaDashboard','Suivi & analyse'],['jumiaListings','Listings'],['jumiaStores','Mes boutiques'],['jumiaClients','Mes clients']].map(([key,label])=>`<button type="button" data-page="${key}" class="nav-link ${page===key?'active':''}">${navIcon}<span>${label}</span></button>`).join('');$('#content').innerHTML=renderJumiaDelegate();syncEditModal();return;
  }
 
  if(state.currentUser?.role!=='admin'&&['users','settings','banks','audit','jumiaStores','jumiaHubs','jumiaListings','jumiaCategories','jumiaBrands'].includes(page))page='dashboard';
