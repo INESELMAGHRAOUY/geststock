@@ -20,7 +20,7 @@ La base locale est `data/stock.db` (ignorée par Git). Sauvegarder cette base r�
 
 ## Limites de la première version
 
-Deux rôles : administrateur (accès complet) et utilisateur (gestion commerciale sans gestion des comptes ni paramètres). Authentification par session, HTTPS requis sur un hébergement. La limitation des tentatives repose sur l’adresse du pair réseau ; derrière un proxy, cette limite peut être partagée. Pas encore de paiements, avoirs, retours, comptabilité ou garantie de conformité fiscale. Ajuster le modèle de chèque au formulaire bancaire avant utilisation ; le montant en lettres est calculé automatiquement. L’impression utilise la boîte de dialogue du navigateur et nécessite une imprimante compatible.
+Trois profils : administrateur (accès complet), utilisateur (gestion commerciale sans gestion des comptes ni paramètres) et délégué Jumia (accès limité à ses boutiques). Authentification par session, HTTPS requis sur un hébergement. La limitation des tentatives repose sur l’adresse du pair réseau ; derrière un proxy, cette limite peut être partagée. Pas encore de paiements, avoirs, retours, comptabilité ou garantie de conformité fiscale. Ajuster le modèle de chèque au formulaire bancaire avant utilisation ; le montant en lettres est calculé automatiquement. L’impression utilise la boîte de dialogue du navigateur et nécessite une imprimante compatible.
 
 ## Hostinger et sauvegardes
 
@@ -33,6 +33,10 @@ Deux rôles : administrateur (accès complet) et utilisateur (gestion commercial
 - Restauration : arrêter les écritures et le serveur via une procédure prise en charge par l’hébergeur, préserver la base actuelle, restaurer la copie sélectionnée au chemin `DB_PATH`, puis redémarrer et contrôler les données. Ne jamais remplacer une base utilisée par un processus actif.
 
 ## Gestion des utilisateurs
+
+Le profil **Délégué Jumia** donne accès uniquement aux boutiques affectées au compte, ainsi qu’aux boutiques qu’il crée lui-même. Il gère ses listings, ses clients et ses commandes (saisie, préparation, expédition, résultat de livraison). Les autres modules et les imports financiers sont bloqués côté serveur. Le catalogue partagé expose seulement la disponibilité **Disponible / Rupture**, les identifiants produits et les informations de vente : aucune quantité de stock ni prix d’achat. Les coûts internes, banques, paiements, bénéfices, historiques financiers et commandes des autres boutiques ne sont pas transmis. Les retours avec indemnisation restent gérés par l’administrateur.
+
+Pour Marwane : dans **Utilisateurs**, cliquer **Préparer le compte Marwane**, définir un mot de passe d’au moins 16 caractères, puis enregistrer. Laisser les boutiques vides pour qu’il crée les siennes. Partager le lien de connexion affiché sur sa ligne et ses identifiants. Les créations de boutiques sont liées atomiquement au compte ; les modifications utilisent un jeton de version pour éviter d’écraser une mise à jour concurrente. Les changements de permissions déconnectent immédiatement les sessions du compte. Les comptes existants conservent leurs droits après la migration SQLite additive.
 
 Au premier démarrage sur une base sans comptes, `ADMIN_USER` et `ADMIN_PASSWORD` initialisent le premier administrateur. Sur une base contenant déjà des comptes, ces variables ne réinitialisent aucun mot de passe. Le menu Utilisateurs, accessible aux administrateurs, permet de créer des comptes, modifier le nom et le rôle, réinitialiser le mot de passe et désactiver un compte. Une modification révoque les sessions du compte concerné ; un utilisateur désactivé ne peut plus se connecter. Le dernier administrateur actif ne peut pas être désactivé ou rétrogradé. Les mots de passe sont stockés sous forme de hash scrypt avec un sel propre à chaque mot de passe, et ne sont jamais renvoyés à l’interface.
 
