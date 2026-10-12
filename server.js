@@ -1,3 +1,4 @@
+const {handleDelegateSupplier,handleDelegatePurchase}=require('./delegate-purchases');
 const {setupDelegateAccess,isJumiaDelegate,assignedStores,delegateState,delegateMutation}=require('./jumia-delegate');
 const {analyzeFuelOrders}=require('./jumia-fuel-analysis');
 const {handleFuel}=require('./fuel');
@@ -81,8 +82,8 @@ async function dailyBackup() {
 initialization.then(dailyBackup).catch(()=>{});
 setInterval(dailyBackup,60*60*1000).unref();
 const rawList = kind => db.prepare('SELECT id,data FROM records WHERE kind=? ORDER BY id DESC').all(kind).map(r=>({ ...JSON.parse(r.data),id:r.id}));
-const list=kind=>{const records=rawList(kind);if(kind!=='products')return records;const movements=rawList('movements'),documents=rawList('documents'),inventories=rawList('inventories'),orders=rawList('jumiaOrders');return records.map(p=>stockBreakdown(p,movements,documents,inventories,orders));};
-const kinds = ['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments','banks','inventories','settlements','accountOpenings','jumiaStores','jumiaOrders','jumiaHubs','jumiaReports','jumiaCategories','jumiaPayouts'];
+const list=kind=>{const records=rawList(kind);if(kind!=='products')return records;const movements=rawList('movements'),documents=rawList('documents'),inventories=rawList('inventories'),orders=rawList('jumiaOrders');return records.map(p=>stockBreakdown(p,movements,documents,inventories,orders,rawList('delegatePurchases')));};
+const kinds = ['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments','banks','inventories','settlements','accountOpenings','jumiaStores','jumiaOrders','jumiaHubs','jumiaReports','jumiaCategories','jumiaPayouts','delegateSuppliers','delegatePurchases'];
 function save(kind,data,id){if(id) db.prepare('UPDATE records SET data=? WHERE id=? AND kind=?').run(JSON.stringify(data),id,kind);else id=Number(db.prepare('INSERT INTO records(kind,data) VALUES(?,?)').run(kind,JSON.stringify(data)).lastInsertRowid);return id;}
 if(!db.prepare("SELECT value FROM app_metadata WHERE key='banks-defaults-v1'").get()){
  db.exec('BEGIN IMMEDIATE');try{
@@ -138,7 +139,7 @@ const server=http.createServer(async(req,res)=>{
  if(url.pathname.startsWith('/api/')){
  res.setHeader('Content-Type','application/json');
  if(isJumiaDelegate(currentUser)){
- const permitted=(req.method==='GET'&&['/api/state','/api/jumiaBrands'].includes(url.pathname))||(req.method==='POST'&&['/api/jumiaDelegateOrders','/api/jumiaDelegateListings','/api/jumiaDelegateStores','/api/jumiaDelegateImports'].includes(url.pathname))||(req.method==='GET'&&/^\/api\/product-images\/\d+$/.test(url.pathname)&&list('products').some(p=>p.active!==false&&p.imageId===Number(url.pathname.split('/')[3])));
+ const permitted=(req.method==='GET'&&['/api/state','/api/jumiaBrands'].includes(url.pathname))||(req.method==='POST'&&['/api/jumiaDelegateOrders','/api/jumiaDelegateListings','/api/jumiaDelegateStores','/api/jumiaDelegateImports','/api/jumiaDelegatePurchases','/api/jumiaDelegateSuppliers'].includes(url.pathname))||(req.method==='GET'&&/^\/api\/product-images\/\d+$/.test(url.pathname)&&list('products').some(p=>p.active!==false&&p.imageId===Number(url.pathname.split('/')[3])));
  if(!permitted){res.writeHead(403);return res.end(JSON.stringify({error:'Accès limité aux boutiques Jumia affectées.'}));}
  if(req.method==='GET'&&url.pathname==='/api/state')return res.end(JSON.stringify(delegateState({user:currentUser,list,kinds})));
  }
@@ -187,6 +188,8 @@ const server=http.createServer(async(req,res)=>{
  else db.prepare('INSERT INTO recurring_charges(label,category,amount_cents,active,start_month,supplier_id) VALUES(?,?,?,?,?,?)').run(body.label.trim(),body.category.trim(),Math.round(body.amount*100),Number(body.active),body.startMonth,supplier?.id||null);
  syncRecurring(db);return res.end('{}');
  }
+ if(url.pathname==='/api/delegatePurchases'){if(req.method!=='POST'||currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès administrateur requis'}));}return res.end(JSON.stringify(handleDelegatePurchase({db,body,user:currentUser,list,save})));}
+ if(url.pathname==='/api/jumiaDelegatePurchases'||url.pathname==='/api/jumiaDelegateSuppliers'){if(req.method!=='POST'||!isJumiaDelegate(currentUser)){res.writeHead(403);return res.end(JSON.stringify({error:'Compte délégué requis'}));}return res.end(JSON.stringify(url.pathname.endsWith('Suppliers')?handleDelegateSupplier({body,user:currentUser,list,save}):handleDelegatePurchase({db,body,user:currentUser,list,save,assignedStoreIds:assignedStores(currentUser)})));}
  if(['/api/jumiaDelegateOrders','/api/jumiaDelegateListings','/api/jumiaDelegateStores','/api/jumiaDelegateImports'].includes(url.pathname)){if(req.method!=='POST'||!isJumiaDelegate(currentUser)){res.writeHead(403);return res.end(JSON.stringify({error:'Compte délégué requis'}));}return res.end(JSON.stringify(delegateMutation({db,body,user:currentUser,list,save,kind:url.pathname.split('/')[2]})));}
  const kind=url.pathname.split('/')[2];if(kind==='settings'){if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(body));return res.end('{}');}
  if(kind==='jumiaFuelAnalysis'){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(analyzeFuelOrders(body,list)));}
@@ -370,7 +373,7 @@ const server=http.createServer(async(req,res)=>{
  if(kind==='products'){db.exec('BEGIN');try{if(productImage){body.imageId=Number(db.prepare('INSERT INTO product_images(name,mime,content) VALUES(?,?,?)').run(productImage.name,productImage.mime,productImage.bytes).lastInsertRowid);body.imageName=productImage.name;}const id=save(kind,{...body,active:true});db.exec('COMMIT');return res.end(JSON.stringify({id}));}catch(e){db.exec('ROLLBACK');throw e;}}
  return res.end(JSON.stringify({id:save(kind,{...body,active:true})}));
  }
- const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js','jumia-delegate.js'].includes(file)){res.writeHead(404);return res.end();}
+ const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js','jumia-delegate.js','delegate-purchases.js'].includes(file)){res.writeHead(404);return res.end();}
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(path.join(__dirname,'public',file)));
  }catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}
 });
