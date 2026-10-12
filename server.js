@@ -1,6 +1,6 @@
 const {readProductImage}=require('./product-image');
 const {handleDelegateSupplier,handleDelegatePurchase,handleDelegateProduct}=require('./delegate-purchases');
-const {setupDelegateAccess,isJumiaDelegate,assignedStores,delegateState,delegateMutation,catalogNotifications,markCatalogSeen}=require('./jumia-delegate');
+const {setupDelegateAccess,isJumiaDelegate,assignedStores,delegateState,delegateMutation,catalogNotifications,markCatalogSeen,delegateAvailability}=require('./jumia-delegate');
 const {analyzeFuelOrders}=require('./jumia-fuel-analysis');
 const {handleFuel}=require('./fuel');
 const {handleJumiaPayout}=require('./jumia-payouts');
@@ -141,10 +141,11 @@ const server=http.createServer(async(req,res)=>{
  if(url.pathname.startsWith('/api/')){
  res.setHeader('Content-Type','application/json');
  if(isJumiaDelegate(currentUser)){
- const permitted=(req.method==='GET'&&['/api/state','/api/jumiaBrands','/api/jumiaDelegateCatalogNotifications'].includes(url.pathname))||(req.method==='POST'&&['/api/jumiaDelegateOrders','/api/jumiaDelegateListings','/api/jumiaDelegateStores','/api/jumiaDelegateImports','/api/jumiaDelegatePurchases','/api/jumiaDelegateSuppliers','/api/jumiaDelegateProducts','/api/jumiaDelegateCatalogSeen'].includes(url.pathname))||(req.method==='GET'&&/^\/api\/product-images\/\d+$/.test(url.pathname)&&(list('products').some(p=>p.active!==false&&p.imageId===Number(url.pathname.split('/')[3]))||db.prepare('SELECT user_id FROM personal_image_owners WHERE image_id=?').get(Number(url.pathname.split('/')[3]))?.user_id===currentUser.id));
+ const permitted=(req.method==='GET'&&['/api/state','/api/jumiaBrands','/api/jumiaDelegateCatalogNotifications','/api/jumiaDelegateAvailability'].includes(url.pathname))||(req.method==='POST'&&['/api/jumiaDelegateOrders','/api/jumiaDelegateListings','/api/jumiaDelegateStores','/api/jumiaDelegateImports','/api/jumiaDelegatePurchases','/api/jumiaDelegateSuppliers','/api/jumiaDelegateProducts','/api/jumiaDelegateCatalogSeen'].includes(url.pathname))||(req.method==='GET'&&/^\/api\/product-images\/\d+$/.test(url.pathname)&&(list('products').some(p=>p.active!==false&&p.imageId===Number(url.pathname.split('/')[3]))||db.prepare('SELECT user_id FROM personal_image_owners WHERE image_id=?').get(Number(url.pathname.split('/')[3]))?.user_id===currentUser.id));
  if(!permitted){res.writeHead(403);return res.end(JSON.stringify({error:'Accès limité aux boutiques Jumia affectées.'}));}
  if(req.method==='GET'&&url.pathname==='/api/state')return res.end(JSON.stringify(delegateState({user:currentUser,list,kinds})));
  }
+ if(url.pathname==='/api/jumiaDelegateAvailability'){if(req.method!=='GET'||!isJumiaDelegate(currentUser)){res.writeHead(403);return res.end(JSON.stringify({error:'Compte délégué requis'}));}return res.end(JSON.stringify(delegateAvailability(currentUser,list)));}
  if(url.pathname==='/api/jumiaDelegateCatalogNotifications'){if(req.method!=='GET'||!isJumiaDelegate(currentUser)){res.writeHead(403);return res.end(JSON.stringify({error:'Compte délégué requis'}));}return res.end(JSON.stringify(catalogNotifications(currentUser,list)));}
  if(req.method==='GET'&&/^\/api\/product-images\/\d+$/.test(url.pathname)){const imageOwner=db.prepare('SELECT user_id FROM personal_image_owners WHERE image_id=?').get(Number(url.pathname.split('/')[3]));if(imageOwner&&currentUser.role!=='admin'&&imageOwner.user_id!==currentUser.id){res.writeHead(403);return res.end(JSON.stringify({error:'Image personnelle non autorisée'}));}const im=db.prepare('SELECT * FROM product_images WHERE id=?').get(Number(url.pathname.split('/')[3]));if(!im){res.writeHead(404);return res.end();}res.setHeader('Content-Type',im.mime);return res.end(Buffer.from(im.content));}
  if(req.method==='GET' && /^\/api\/attachments\/\d+$/.test(url.pathname)){
