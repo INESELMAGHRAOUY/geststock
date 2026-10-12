@@ -81,6 +81,7 @@ function handleJumia({db,body,user,list,save,kind,outerTransaction=false,allowSt
  for(const [id,q] of delta){const product=list('products').find(p=>p.id===id);if(!product||(!allowStockShortage&&q<0&&product.stock+q<0))throw Error('Stock insuffisant : '+(product?.name||id));}
  updated.history=[...(old?.history||[]),{at:new Date().toISOString(),by:user.name,reason:body.reason||'Commande saisie',statuses:updated.lines.map(l=>({lineId:l.lineId,name:l.name,status:l.status}))}];
  }
+ if(kind==='jumiaStores'&&old?.delegateOwnerId)updated.delegateOwnerId=old.delegateOwnerId;
  updated.createdAt=old?.createdAt||new Date().toISOString();updated.createdBy=old?.createdBy||user.name;updated.updatedAt=new Date().toISOString();updated.updatedBy=user.name;
  const id=save(kind,updated,old?.id);if(old)auditRecord(db,kind,old,{...updated,id},user,body.action==='setActive'?(updated.active?'Réactivation':'Désactivation'):'Modification',body.reason);if(!outerTransaction)db.exec('COMMIT');return {id};
  }catch(error){if(!outerTransaction)db.exec('ROLLBACK');throw error;}

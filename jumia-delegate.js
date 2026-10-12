@@ -11,7 +11,9 @@ function scopedStore(body,user,list){if(!isJumiaDelegate(user))throw Error('Comp
 function delegateMutation({db,body,user,list,save,kind}){
  if(!isJumiaDelegate(user))throw Error('Compte délégué requis');
  if(kind==='jumiaDelegateStores'){
- if(body.id!==undefined||body.action)throw Error('Création de boutique uniquement');
+ if(body.action)throw Error('Action non autorisée');
+ if(body.id!==undefined){const store=scopedStore({storeId:body.id},user,list);if(body.expectedVersion!==version(store))throw Error('La boutique a changé. Actualisez la page');return handleJumia({db,body:{...store,...pick(body,['name','commissionPercent']),id:store.id,expectedRecord:JSON.stringify(store),reason:'Boutique modifiée par délégué '+user.name},user:{...user,role:'admin'},list,save,kind:'jumiaStores'});}
+
  db.exec('BEGIN IMMEDIATE');try{const result=handleJumia({db,body:{name:body.name,commissionPercent:body.commissionPercent??15,defaults:{supplierTransport:0,hubTransport:20,ticketUnitPrice:1,saltUnitPrice:2,cartonUnitPrice:2}},user:{...user,role:'admin'},list,save,kind:'jumiaStores',outerTransaction:true});const store=list('jumiaStores').find(s=>s.id===result.id);save('jumiaStores',{...store,delegateOwnerId:user.id},store.id);db.prepare('UPDATE users SET jumia_store_ids=? WHERE id=?').run(JSON.stringify([...assignedStores(user),store.id]),user.id);db.exec('COMMIT');return result;}catch(error){db.exec('ROLLBACK');throw error;}
  }
  const store=scopedStore(body,user,list);let payload,target;
