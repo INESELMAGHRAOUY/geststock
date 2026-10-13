@@ -1,8 +1,10 @@
+let delegateOrdersAccount=null;
 let delegateStoreId='',delegateSearch='',delegateStatus='',delegateEditor=null,delegateLines=[],delegateAnalysisStoreId='',delegateAnalysisFrom='',delegateAnalysisTo='';
 function delegateStore(){return state.jumiaStores.find(s=>String(s.id)===delegateStoreId)||state.jumiaStores[0];}
 function delegateStock(available){return available?'Disponible':'Rupture';}
 function delegateStoreSelector(){const store=delegateStore();return `<label>Boutique<select id="delegate-store">${state.jumiaStores.map(s=>`<option value="${s.id}" ${s.id===store?.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select></label>`;}
 function renderJumiaDelegate(){
+ if(['jumiaOrders','jumiaDashboard'].includes(page)&&typeof jumiaFilters!=='undefined'&&delegateOrdersAccount!==state.currentUser?.id){delegateOrdersAccount=state.currentUser?.id;const stores=state.jumiaStores.filter(s=>s.active!==false);if(!jumiaFilters.store&&stores.length===1)jumiaFilters.store=String(stores[0].id);}
  if(page!=='jumiaImports')resetDelegateImport();
  if(page==='delegateShortages')return renderDelegateShortages();
  if(page==='delegateCatalog')return renderDelegateCatalogNotifications();
