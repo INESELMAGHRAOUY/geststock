@@ -6,6 +6,7 @@ test('authentification, origine et sauvegarde SQLite',async()=>{
  try{
  await new Promise((resolve,reject)=>{child.stdout.once('data',resolve);child.once('error',reject);child.once('exit',c=>reject(Error('Startup '+c)));});
  const url='http://127.0.0.1:3101';
+ const versionResponse=await fetch(url+'/api/version');assert.equal(versionResponse.status,200);assert.equal(versionResponse.headers.get('cache-control'),'no-store');const release=await versionResponse.json();assert.equal(release.name,'jumia-complete-v4');assert.deepEqual(Object.keys(release).sort(),['assetsVersion','name']);const loginHtml=await(await fetch(url+'/login')).text();assert.ok(loginHtml.includes('/login.js?v='+release.assetsVersion));assert.ok(loginHtml.includes('/style.css?v='+release.assetsVersion));
  const unauthenticated=await fetch(url,{redirect:'manual'});assert.equal(unauthenticated.status,303);assert.equal(unauthenticated.headers.get('location'),'/login');assert.equal(unauthenticated.headers.get('www-authenticate'),null);
  assert.match(await(await fetch(url+'/login')).text(),/login-form/);assert.equal((await fetch(url+'/login.js')).status,200);
  assert.equal((await fetch(url+'/api/state')).status,401);assert.equal((await fetch(url+'/api/attachments/1')).status,401);

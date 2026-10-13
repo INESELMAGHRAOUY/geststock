@@ -1,3 +1,5 @@
+const {getRelease,versionHtml}=require('./app-release');
+const appRelease=getRelease(__dirname);
 const {workspaceState,handleWorkspace}=require('./jumia-delegate-workspace');
 const {readProductImage}=require('./product-image');
 const {handleDelegateSupplier,handleDelegatePurchase,handleDelegateProduct}=require('./delegate-purchases');
@@ -97,10 +99,13 @@ if(!db.prepare("SELECT value FROM app_metadata WHERE key='banks-defaults-v1'").g
 const server=http.createServer(async(req,res)=>{
  try {
  res.setHeader('Cache-Control','no-store');
+ res.setHeader('X-GestStock-Release',appRelease.name);
+ res.setHeader('X-GestStock-Assets-Version',appRelease.assetsVersion);
  res.setHeader('X-Content-Type-Options','nosniff');
  res.setHeader('X-Frame-Options','DENY');
  res.setHeader('Referrer-Policy','same-origin');
  const url=new URL(req.url,'http://localhost');
+ if(url.pathname==='/api/version'&&req.method==='GET'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify(appRelease));}
  if (!['GET','HEAD'].includes(req.method) && (req.headers['sec-fetch-site']==='cross-site' || (req.headers.origin && new URL(req.headers.origin).host!==req.headers.host))) {
  res.writeHead(403);return res.end('Origine non autorisée');
  }
@@ -132,7 +137,7 @@ const server=http.createServer(async(req,res)=>{
  if(!localOnly && !currentUser?.active) sessions.delete(token);
  if(url.pathname==='/login' && req.method==='GET') {
  if(localOnly || sessions.has(token)){res.writeHead(303,{Location:'/'});return res.end();}
- res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(fs.readFileSync(path.join(__dirname,'public/login.html')));
+ res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(versionHtml(fs.readFileSync(path.join(__dirname,'public/login.html'),'utf8'),appRelease));
  }
  const loginAsset=['/login.js','/style.css'].includes(url.pathname) && req.method==='GET';
  if(!localOnly && !sessions.has(token) && !loginAsset) {
@@ -383,7 +388,7 @@ const server=http.createServer(async(req,res)=>{
  return res.end(JSON.stringify({id:save(kind,{...body,active:true})}));
  }
  const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js','jumia-delegate.js','delegate-purchases.js'].includes(file)){res.writeHead(404);return res.end();}
- res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(path.join(__dirname,'public',file)));
+ res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');const content=fs.readFileSync(path.join(__dirname,'public',file));res.end(file.endsWith('.html')?versionHtml(content.toString('utf8'),appRelease):content);
  }catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}
 });
 initialization.then(()=>server.listen(process.env.PORT||3000,process.env.HOST||'127.0.0.1',()=>console.log('GestStock démarré'))).catch(error=>{console.error(error.message);process.exit(1);});
