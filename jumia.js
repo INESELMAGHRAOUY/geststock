@@ -1,3 +1,4 @@
+const {providerCode}=require('./jumia-hub-provider');
 const {storeIdentity,validateStoreIdentity,verifyStatementStore}=require('./jumia-store-identity');
 const {delegateBalance,delegateCost,delegateConsumption,stockKey}=require('./delegate-stock');
 const {parseJumiaCSV,parseCSV}=require('./public/jumia-import');
@@ -30,7 +31,7 @@ function handleJumia({db,body,user,list,save,kind,outerTransaction=false,allowSt
  if(!Array.isArray(body.results)||body.results.length!==shipped.length||new Set(body.results.map(r=>r.lineId)).size!==shipped.length||body.results.some(r=>!shipped.some(l=>l.lineId===r.lineId)||!['Livré','La livraison a échoué'].includes(r.status)))throw Error('Choisissez le résultat de chaque article expédié');
  updated={...old,lines:old.lines.map(l=>l.status==='Expédié'?{...l,status:body.results.find(r=>r.lineId===l.lineId).status,returnedToStock:body.results.find(r=>r.lineId===l.lineId).status==='La livraison a échoué'&&!l.lost}:l)};
  }else if(body.action==='setActive'){
- if(!old||typeof body.active!=='boolean'||body.active===(old.active!==false))throw Error('État invalide');updated={...old,active:body.active};
+ if(!old||typeof body.active!=='boolean'||body.active===(old.active!==false))throw Error('État invalide');if(kind==='jumiaHubs'&&body.active&&providerCode(old.shippingProviderCode)&&list(kind).some(h=>h.id!==old.id&&h.active!==false&&providerCode(h.shippingProviderCode)===providerCode(old.shippingProviderCode)))throw Error('Ce Shipping Provider est déjà associé à un hub actif');updated={...old,active:body.active};
  }else if(kind==='jumiaReports'){
  if(old)throw Error('Un import ne peut pas être modifié');const store=list('jumiaStores').find(s=>s.id===body.storeId&&s.active!==false);if(!store)throw Error('Choisissez une boutique active');
  const transactions=parseJumiaCSV(body.csv);const statementStoreId=verifyStatementStore(transactions,store);const existing=new Set(list(kind).filter(r=>r.active!==false&&r.storeId===store.id).flatMap(r=>r.transactions.map(t=>t['Transaction Number'])));if(transactions.some(t=>existing.has(t['Transaction Number'])))throw Error('Ce fichier contient des transactions déjà importées dans cette boutique');
@@ -42,7 +43,8 @@ function handleJumia({db,body,user,list,save,kind,outerTransaction=false,allowSt
  if(typeof body.name!=='string'||!body.name.trim()||typeof body.city!=='string'||!body.city.trim())throw Error('Nom et ville du hub obligatoires');
  for(const key of ['address','phone','contact'])if(body[key]!==undefined&&typeof body[key]!=='string')throw Error('Coordonnées du hub invalides');
  if(list(kind).some(h=>h.id!==old?.id&&h.name.toLowerCase()===body.name.trim().toLowerCase()&&h.city.toLowerCase()===body.city.trim().toLowerCase()))throw Error('Ce hub existe déjà dans cette ville');
- updated={name:body.name.trim(),city:body.city.trim(),address:String(body.address||''),phone:String(body.phone||''),contact:String(body.contact||''),active:old?.active!==false};
+ const shippingProviderCode=providerCode(body.shippingProviderCode??old?.shippingProviderCode);if(shippingProviderCode&&list(kind).some(h=>h.id!==old?.id&&h.active!==false&&providerCode(h.shippingProviderCode)===shippingProviderCode))throw Error('Ce Shipping Provider est déjà associé à un hub actif');
+ updated={shippingProviderCode,name:body.name.trim(),city:body.city.trim(),address:String(body.address||''),phone:String(body.phone||''),contact:String(body.contact||''),active:old?.active!==false};
  }else if(kind==='jumiaStores'){
  if(user.role!=='admin')throw Error('Gestion des stores réservée aux administrateurs');if(typeof body.name!=='string'||!body.name.trim())throw Error('Nom de boutique obligatoire');
  if(list(kind).some(s=>s.id!==old?.id&&s.name.toLowerCase()===body.name.trim().toLowerCase()))throw Error('Cette boutique existe déjà');
@@ -77,7 +79,7 @@ function handleJumia({db,body,user,list,save,kind,outerTransaction=false,allowSt
  const hub=body.hubId?list('jumiaHubs').find(h=>h.id===body.hubId&&(h.active!==false||h.id===old?.hubId)):null;if(body.hubId&&!hub)throw Error('Hub indisponible');
  const costs={};for(const key of ['supplierTransport','hubTransport','returnTransport','ticketUnitPrice','saltUnitPrice','cartonUnitPrice','other'])costs[key]=money(body.costs?.[key]??0,key);
  for(const key of ['ticketQty','cartonQty','saltKg']){const value=body.costs?.[key]??0;if(!Number.isFinite(value)||value<0||(key!=='saltKg'&&!Number.isSafeInteger(value)))throw Error('Quantité emballage invalide');costs[key]=value;}
- updated={storeId:store.id,storeName:store.name,hubId:hub?.id||null,hubName:hub?.name||'',hubCity:hub?.city||'',hubAddress:hub?.address||'',number:body.number.trim(),date:body.date,shippedDate:body.shippedDate??old?.shippedDate??'',csvUpdatedAt:body.csvUpdatedAt??old?.csvUpdatedAt??'',customer:String(body.customer||''),address:String(body.address||''),paymentMethod:String(body.paymentMethod||'À la livraison'),shippingMethod:String(body.shippingMethod||'Dropshipping'),tracking:String(body.tracking||''),notes:String(body.notes||''),lines,costs,active:old?.active!==false};
+ updated={storeId:store.id,storeName:store.name,hubId:hub?.id||null,hubName:hub?.name||'',hubCity:hub?.city||'',hubAddress:hub?.address||'',shippingProviderCode:providerCode(body.shippingProviderCode??old?.shippingProviderCode),number:body.number.trim(),date:body.date,shippedDate:body.shippedDate??old?.shippedDate??'',csvUpdatedAt:body.csvUpdatedAt??old?.csvUpdatedAt??'',customer:String(body.customer||''),address:String(body.address||''),paymentMethod:String(body.paymentMethod||'À la livraison'),shippingMethod:String(body.shippingMethod||'Dropshipping'),tracking:String(body.tracking||''),notes:String(body.notes||''),lines,costs,active:old?.active!==false};
  }
  if(kind==='jumiaOrders'){
  if(stockOwnerId){updated.stockOwnerId=stockOwnerId;updated.lines=updated.lines.map(l=>({...l,fromStock:false,...(!old?.stockOwnerId?{purchasePrice:ownerCost(l).price,purchaseSourceId:ownerCost(l).id}:{})}));const stores=list('jumiaStores'),delta=new Map();for(const [key,qty] of delegateConsumption(old||{lines:[]},stores))delta.set(key,(delta.get(key)||0)+qty);for(const [key,qty] of delegateConsumption(updated,stores))delta.set(key,(delta.get(key)||0)-qty);for(const line of updated.lines){const key=stockKey(line,stores),change=delta.get(key)||0;if(!allowStockShortage&&change<0&&delegateBalance(stockOwnerId,line,list('delegatePurchases'),list('jumiaOrders'),stores,list('delegateInventories'))+change<0)throw Error('Votre stock est insuffisant : '+line.name);}}
