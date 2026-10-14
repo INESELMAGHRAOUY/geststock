@@ -1,3 +1,4 @@
+const {setupLoginHistory,recordLogin,readLoginHistory}=require('./login-history');
 const {googleSessionCompleteHtml}=require('./google-session-complete');
 const {verifyEmail,resendVerification}=require('./email-verification');
 const {googleLoginProblem,setupGoogleLogin,createGoogleLogin,resolveGoogleAccount,enrollmentProfile,completeGoogleRegistration}=require('./google-login');
@@ -58,6 +59,7 @@ CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, username TEXT NOT NULL 
 setupDelegateAccess(db);
 setupAccountAccess(db);
 setupGoogleLogin(db);
+setupLoginHistory(db);
 const initialization=(async()=>{
  if(!localOnly && !db.prepare('SELECT id FROM users LIMIT 1').get()) {
  if(!username || !password || password.length<16) throw Error('Configurer ADMIN_USER et ADMIN_PASSWORD (16 caractères minimum).');
@@ -142,7 +144,7 @@ const server=http.createServer(async(req,res)=>{
  const entry=failures.get(address)||{start:now,count:0};entry.count++;failures.set(address,entry);
  res.writeHead(401,{'Content-Type':'application/json'});return res.end(JSON.stringify({error:'Identifiants incorrects.'}));
  }
- const session=crypto.randomBytes(32).toString('hex');sessions.set(session,{expires:now+sessionLifetime,userId:user.id});
+ recordLogin({db,user,method:'Mot de passe',req});const session=crypto.randomBytes(32).toString('hex');sessions.set(session,{expires:now+sessionLifetime,userId:user.id});
  res.setHeader('Set-Cookie',`${cookieName}=${session}; Max-Age=${sessionLifetime/1000}${cookieOptions}`);
  res.setHeader('Content-Type','application/json');return res.end('{}');
  }
@@ -152,7 +154,7 @@ const server=http.createServer(async(req,res)=>{
  if(url.pathname==='/api/auth-options'&&req.method==='GET'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({google:googleLogin.ready}));}
  const googleCookieName=cookieName.startsWith('__Host-')?'__Host-geststock_google':'geststock_google',googleCookieOptions=`; HttpOnly; SameSite=Lax; Path=/${googleCookieName.startsWith('__Host-')?'; Secure':''}`;
  if(url.pathname==='/api/google/start'&&req.method==='GET'){if(!allowPublicAuth('google-start:'+req.socket.remoteAddress,20,15*60*1000,now)){res.writeHead(303,{Location:'/login?authError='+encodeURIComponent('Trop de tentatives Google. Réessayez plus tard.')});return res.end();}if(!googleLogin.ready){res.writeHead(303,{Location:'/login?authError='+encodeURIComponent('Connexion Google non configurée. Utilisez l’inscription par email.')});return res.end();}const flow=googleLogin.start({db});res.setHeader('Set-Cookie',`${googleCookieName}=${flow.state}; Max-Age=600${googleCookieOptions}`);res.writeHead(303,{Location:flow.url});return res.end();}
- if(url.pathname==='/api/google/callback'&&req.method==='GET'){res.setHeader('Set-Cookie',`${googleCookieName}=; Max-Age=0${googleCookieOptions}`);try{if(!googleLogin.ready)throw Error('Connexion Google non configurée.');const cookie=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(googleCookieName+'='))?.slice(googleCookieName.length+1);const profile=await googleLogin.callback({db,state:url.searchParams.get('state'),cookie,code:url.searchParams.get('code')});const result=await resolveGoogleAccount({db,profile,hashPassword,revokeUser});if(result.user){const session=crypto.randomBytes(32).toString('hex');sessions.set(session,{expires:Date.now()+sessionLifetime,userId:result.user.id});res.setHeader('Set-Cookie',[`${googleCookieName}=; Max-Age=0${googleCookieOptions}`,`${cookieName}=${session}; Max-Age=${sessionLifetime/1000}${cookieOptions}`]);res.setHeader('Content-Type','text/html; charset=utf-8');res.setHeader('Referrer-Policy','no-referrer');res.writeHead(200);return res.end(versionHtml(googleSessionCompleteHtml(),appRelease));}else res.writeHead(303,{Location:result.enrollment?'/login?google=1#google='+result.enrollment:'/login?authNotice='+encodeURIComponent(result.message)});return res.end();}catch(error){const problem=googleLoginProblem(error);console.error('Google OAuth : '+problem.code);res.writeHead(303,{Location:'/login?authError='+encodeURIComponent(problem.message)});return res.end();}}
+ if(url.pathname==='/api/google/callback'&&req.method==='GET'){res.setHeader('Set-Cookie',`${googleCookieName}=; Max-Age=0${googleCookieOptions}`);try{if(!googleLogin.ready)throw Error('Connexion Google non configurée.');const cookie=(req.headers.cookie||'').split(';').map(s=>s.trim()).find(s=>s.startsWith(googleCookieName+'='))?.slice(googleCookieName.length+1);const profile=await googleLogin.callback({db,state:url.searchParams.get('state'),cookie,code:url.searchParams.get('code')});const result=await resolveGoogleAccount({db,profile,hashPassword,revokeUser});if(result.user){recordLogin({db,user:result.user,method:'Google',req});const session=crypto.randomBytes(32).toString('hex');sessions.set(session,{expires:Date.now()+sessionLifetime,userId:result.user.id});res.setHeader('Set-Cookie',[`${googleCookieName}=; Max-Age=0${googleCookieOptions}`,`${cookieName}=${session}; Max-Age=${sessionLifetime/1000}${cookieOptions}`]);res.setHeader('Content-Type','text/html; charset=utf-8');res.setHeader('Referrer-Policy','no-referrer');res.writeHead(200);return res.end(versionHtml(googleSessionCompleteHtml(),appRelease));}else res.writeHead(303,{Location:result.enrollment?'/login?google=1#google='+result.enrollment:'/login?authNotice='+encodeURIComponent(result.message)});return res.end();}catch(error){const problem=googleLoginProblem(error);console.error('Google OAuth : '+problem.code);res.writeHead(303,{Location:'/login?authError='+encodeURIComponent(problem.message)});return res.end();}}
  if(url.pathname==='/api/logout' && req.method==='POST') {
  sessions.delete(token);res.setHeader('Set-Cookie',`${cookieName}=; Max-Age=0${cookieOptions}`);res.setHeader('Content-Type','application/json');return res.end('{}');
  }
@@ -167,6 +169,7 @@ const server=http.createServer(async(req,res)=>{
  if(url.pathname.startsWith('/api/')){res.writeHead(401,{'Content-Type':'application/json'});return res.end(JSON.stringify({error:'Session expirée. Veuillez vous reconnecter.'}));}
  res.writeHead(303,{Location:'/login'});return res.end();
  }
+ if(url.pathname==='/api/login-history'&&req.method==='GET'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify(readLoginHistory({db,user:currentUser,query:url.searchParams})));}
  if(url.pathname.startsWith('/api/')){
  res.setHeader('Content-Type','application/json');
  if(isJumiaDelegate(currentUser)){
@@ -415,7 +418,7 @@ const server=http.createServer(async(req,res)=>{
  if(kind==='products'){db.exec('BEGIN');try{if(productImage){body.imageId=Number(db.prepare('INSERT INTO product_images(name,mime,content) VALUES(?,?,?)').run(productImage.name,productImage.mime,productImage.bytes).lastInsertRowid);body.imageName=productImage.name;}const id=save(kind,{...body,active:true});db.exec('COMMIT');return res.end(JSON.stringify({id}));}catch(e){db.exec('ROLLBACK');throw e;}}
  return res.end(JSON.stringify({id:save(kind,{...body,active:true})}));
  }
- const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','google-complete.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js','jumia-delegate.js','delegate-purchases.js','jumia-delivery-requests.js','delivery-pricing.js','jumia-temporary-math.js','jumia-temporary.js'].includes(file)){res.writeHead(404);return res.end();}
+ const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','login-history.js','google-complete.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js','jumia-delegate.js','delegate-purchases.js','jumia-delivery-requests.js','delivery-pricing.js','jumia-temporary-math.js','jumia-temporary.js'].includes(file)){res.writeHead(404);return res.end();}
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');const content=fs.readFileSync(path.join(__dirname,'public',file));res.end(file.endsWith('.html')?versionHtml(content.toString('utf8'),appRelease):content);
  }catch(e){res.writeHead(e.status||400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}
 });
