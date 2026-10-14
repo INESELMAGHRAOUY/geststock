@@ -1,4 +1,4 @@
-const {setupLoginHistory,recordLogin,readLoginHistory}=require('./login-history');
+const {setupLoginHistory,recordLogin,recordVisit,readLoginHistory}=require('./login-history');
 const {googleSessionCompleteHtml}=require('./google-session-complete');
 const {verifyEmail,resendVerification}=require('./email-verification');
 const {googleLoginProblem,setupGoogleLogin,createGoogleLogin,resolveGoogleAccount,enrollmentProfile,completeGoogleRegistration}=require('./google-login');
@@ -162,7 +162,7 @@ const server=http.createServer(async(req,res)=>{
  if(!localOnly && !currentUser?.active) sessions.delete(token);
  if(url.pathname==='/login' && req.method==='GET') {
  if((localOnly || sessions.has(token))&&!['reset','verify','google','authError','authNotice'].some(k=>url.searchParams.has(k))){res.writeHead(303,{Location:'/'});return res.end();}
- res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(versionHtml(fs.readFileSync(path.join(__dirname,'public/login.html'),'utf8'),appRelease));
+ recordVisit({db,req,res,user:currentUser?.active?currentUser:null,page:'/login',secure:cookieName.startsWith('__Host-')});res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(versionHtml(fs.readFileSync(path.join(__dirname,'public/login.html'),'utf8'),appRelease));
  }
  const loginAsset=['/login.js','/google-complete.js','/style.css'].includes(url.pathname) && req.method==='GET';
  if(!localOnly && !sessions.has(token) && !loginAsset) {
@@ -419,6 +419,7 @@ const server=http.createServer(async(req,res)=>{
  return res.end(JSON.stringify({id:save(kind,{...body,active:true})}));
  }
  const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','login-history.js','google-complete.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js','jumia-delegate.js','delegate-purchases.js','jumia-delivery-requests.js','delivery-pricing.js','jumia-temporary-math.js','jumia-temporary.js'].includes(file)){res.writeHead(404);return res.end();}
+ if(file==='index.html')recordVisit({db,req,res,user:currentUser,page:'/',secure:cookieName.startsWith('__Host-')});
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');const content=fs.readFileSync(path.join(__dirname,'public',file));res.end(file.endsWith('.html')?versionHtml(content.toString('utf8'),appRelease):content);
  }catch(e){res.writeHead(e.status||400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}
 });
