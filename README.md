@@ -100,7 +100,7 @@ Calcul provisoire Jumia (administrateur et délégués) : lecture locale d’un 
 
 ## Inscription et récupération du mot de passe
 
-La page de connexion propose **Créer un compte** et **Mot de passe oublié**. Une inscription crée exclusivement un **Délégué Jumia**, inactif et sans boutiques affectées. Dans **Administration → Utilisateurs**, l’administrateur choisit **Accepter** ou **Refuser**. Modifier un compte en attente ne permet pas de l’activer sans cette décision. Les comptes existants restent approuvés lors de la migration. Le champ Email peut être renseigné pour les comptes existants depuis Utilisateurs ; une adresse ne peut être partagée entre plusieurs comptes.
+La page de connexion propose **Créer un compte** et **Mot de passe oublié**. Téléphone et numéro WhatsApp sont obligatoires lors de l’inscription (8 à 15 chiffres, préfixe international + accepté ; le même numéro peut servir aux deux). Ils sont conservés dans le compte et visibles/modifiables dans Utilisateurs. Les anciens comptes ne sont pas bloqués par cette nouvelle exigence. Une inscription crée exclusivement un **Délégué Jumia**, inactif et sans boutiques affectées. Dans **Administration → Utilisateurs**, l’administrateur choisit **Accepter** ou **Refuser**. Modifier un compte en attente ne permet pas de l’activer sans cette décision. Les comptes existants restent approuvés lors de la migration. Le champ Email peut être renseigné pour les comptes existants depuis Utilisateurs ; une adresse ne peut être partagée entre plusieurs comptes.
 
 Pour envoyer les liens, définir dans Hostinger les variables suivantes, puis redémarrer le serveur :
 
