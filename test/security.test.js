@@ -26,7 +26,7 @@ test('authentification, origine et sauvegarde SQLite',async()=>{
  assert.equal(state.currentUser.role,'admin');const connections=await(await fetch(url+'/api/login-history?method=Mot+de+passe',{headers:auth})).json();assert.equal(connections.total,1);assert.equal(connections.rows[0].username,'admin');assert.equal(connections.rows[0].method,'Mot de passe');assert.equal(state.users.length,2);assert.ok(!JSON.stringify(state).includes('password_hash'));
  const id=state.users.find(u=>u.username==='employee').id;
  const loginEmployee=await login({username:'employee',password:employee.password});assert.equal(loginEmployee.status,200);
- const staffAuth={Cookie:loginEmployee.headers.get('set-cookie').split(';')[0]};assert.equal((await fetch(url+'/api/login-history',{headers:staffAuth})).status,403);
+ const staffAuth={Cookie:loginEmployee.headers.get('set-cookie').split(';')[0]};assert.equal((await fetch(url+'/api/login-history',{headers:staffAuth})).status,403);assert.equal((await fetch(url+'/api/sales-history',{headers:staffAuth})).status,403);
  assert.equal((await changeUser(staffAuth,{...employee,username:'another'})).status,403);
  assert.equal((await fetch(url+'/api/settings',{method:'POST',headers:{...staffAuth,Origin:url},body:'{}'})).status,403);
  assert.equal((await fetch(url+'/api/expensePayments',{method:'POST',headers:{...staffAuth,Origin:url},body:JSON.stringify({id:123,action:'validate'})})).status,403);
