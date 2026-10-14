@@ -116,3 +116,17 @@ Pour envoyer les liens, définir dans Hostinger les variables suivantes, puis re
 Ne pas mettre ces secrets dans GitHub. Sans configuration complète, la connexion et les inscriptions fonctionnent, mais Mot de passe oublié indique que le service email est indisponible. Le statut de configuration est visible dans Utilisateurs. Les liens ne sont envoyés qu’aux comptes actifs et approuvés, à leur email enregistré. La réponse ne confirme pas l’existence d’une adresse.
 
 Le lien expire après 30 minutes, contient un jeton aléatoire dans le fragment de l’URL et ne peut être utilisé qu’une fois. Seul le hash du jeton est conservé dans SQLite ; ni le lien ni le jeton ne sont renvoyés par l’API. Changer le mot de passe ou l’email rend les anciens liens invalides. Une réinitialisation révoque toutes les sessions du compte et ne modifie jamais son approbation ni ses droits. Les endpoints publics limitent les tentatives par adresse réseau ; derrière un proxy partagé, cette limite peut concerner plusieurs personnes. Les tests simulent l’envoi SMTP sans envoyer d’email réel.
+
+## Confirmation email et connexion Google
+
+Les nouvelles inscriptions par mot de passe doivent confirmer leur email (lien à usage unique, valable 24 heures) **et** être acceptées par l’administrateur avant de se connecter. L’administrateur peut accepter la demande avant la confirmation, mais cette acceptation ne permet pas de contourner la vérification. Le bouton **Renvoyer le lien de vérification** permet de redemander un email. Les anciens comptes conservent leur accès lors de la migration ; ils ne sont pas bloqués rétroactivement. La liste Utilisateurs affiche la confirmation de l’email.
+
+Pour activer **Continuer avec Google**, créer un client OAuth de type **Application Web** dans Google Cloud et définir dans Hostinger `GOOGLE_CLIENT_ID` et `GOOGLE_CLIENT_SECRET`. Conserver `APP_PUBLIC_URL=https://inom.inombeauty.com`. URI de redirection autorisée à déclarer dans Google :
+
+```text
+https://inom.inombeauty.com/api/google/callback
+```
+
+Si le site change de domaine, l’URI doit correspondre exactement à `APP_PUBLIC_URL` suivi de `/api/google/callback`. Ne jamais mettre le secret OAuth dans GitHub. Configurer le consentement OAuth et les utilisateurs test autorisés si le projet Google est en mode test. Sans les deux variables, le bouton Google reste masqué et l’inscription par email fonctionne.
+
+Google utilise OAuth avec état lié au navigateur, PKCE et nonce ; l’ID token est vérifié par google-auth-library (signature, audience et expiration) et son email doit être confirmé par Google. Les nouveaux utilisateurs complètent un nom d’utilisateur, un téléphone et WhatsApp ; ils deviennent uniquement des délégués en attente d’acceptation. Le nom et l’email sont repris du profil vérifié, sans accepter de remplacement depuis le formulaire. Les comptes existants peuvent utiliser Google avec leur email enregistré, sans créer de doublon ni changer leurs permissions. Un compte désactivé ou refusé reste bloqué. Pour un compte existant dont l’email n’était pas confirmé, l’ancien mot de passe est invalidé lors de la liaison Google pour éviter de conserver un accès créé par un tiers ; Mot de passe oublié permet de définir ensuite son propre mot de passe. Les jetons d’accès Google ne sont pas conservés.
