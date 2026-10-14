@@ -1,3 +1,7 @@
+const {setupAccountAccess,normalizeEmail,registerAccount,reviewAccount,requestPasswordReset,resetPassword,publicAuthLimiter}=require('./account-access');
+const {createResetMailer}=require('./password-reset-mail');
+const resetMailer=createResetMailer();
+const allowPublicAuth=publicAuthLimiter();
 const {principalJumiaState}=require('./principal-jumia-state');
 const {saveTariffs,handleBilling}=require('./delivery-pricing');
 const {setupDeliveryRequests,handleDeliveryRequest,deliveryDocument}=require('./jumia-delivery-requests');
@@ -48,6 +52,7 @@ CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,dat
 CREATE TABLE IF NOT EXISTS settings(id INTEGER PRIMARY KEY CHECK(id=1),data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, username TEXT NOT NULL COLLATE NOCASE UNIQUE, name TEXT NOT NULL, password_hash TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','user')), active INTEGER NOT NULL DEFAULT 1);`);
 setupDelegateAccess(db);
+setupAccountAccess(db);
 const initialization=(async()=>{
  if(!localOnly && !db.prepare('SELECT id FROM users LIMIT 1').get()) {
  if(!username || !password || password.length<16) throw Error('Configurer ADMIN_USER et ADMIN_PASSWORD (16 caractères minimum).');
@@ -55,7 +60,7 @@ const initialization=(async()=>{
  db.prepare('INSERT INTO users(username,name,password_hash,role) VALUES(?,?,?,?)').run(username.trim(),username.trim(),hash,'admin');
  }
 })();
-const publicUser=user=>({id:user.id,username:user.username,name:user.name,role:isJumiaDelegate(user)?'jumia_delegate':user.role,storeIds:assignedStores(user),active:!!user.active});
+const publicUser=user=>({id:user.id,username:user.username,name:user.name,role:isJumiaDelegate(user)?'jumia_delegate':user.role,storeIds:assignedStores(user),email:user.email||'',approvalStatus:user.approval_status||'approved',requestedAt:user.requested_at||'',active:!!user.active});
 function revokeUser(id){for(const [key,session] of sessions) if(session.userId===id)sessions.delete(key);}
 setupRecurring(db);
 syncRecurring(db);
@@ -126,6 +131,7 @@ const server=http.createServer(async(req,res)=>{
  const credentials=JSON.parse(raw||'{}');
  const user=db.prepare('SELECT * FROM users WHERE username=?').get(typeof credentials.username==='string'?credentials.username.trim():'');
  const valid=await verifyPassword(typeof credentials.password==='string'?credentials.password:'',user?.password_hash||('00000000000000000000000000000000:'+ '0'.repeat(128)));
+ if(user&&valid&&user.approval_status!=='approved'){res.writeHead(403,{'Content-Type':'application/json'});return res.end(JSON.stringify({error:user.approval_status==='pending'?'Votre compte est en attente de validation par l’administrateur.':'Votre inscription a été refusée. Contactez l’administrateur.'}));}
  if(!user || !user.active || !valid) {
  const entry=failures.get(address)||{start:now,count:0};entry.count++;failures.set(address,entry);
  res.writeHead(401,{'Content-Type':'application/json'});return res.end(JSON.stringify({error:'Identifiants incorrects.'}));
@@ -134,13 +140,16 @@ const server=http.createServer(async(req,res)=>{
  res.setHeader('Set-Cookie',`${cookieName}=${session}; Max-Age=${sessionLifetime/1000}${cookieOptions}`);
  res.setHeader('Content-Type','application/json');return res.end('{}');
  }
+ if(['/api/register','/api/forgot-password','/api/reset-password'].includes(url.pathname)&&req.method==='POST'){
+ res.setHeader('Content-Type','application/json');const action=url.pathname.split('/').pop(),limit=action==='register'?5:action==='forgot-password'?5:20,windowMs=action==='register'?60*60*1000:15*60*1000;if(!allowPublicAuth(action+':'+req.socket.remoteAddress,limit,windowMs,now)){res.writeHead(429,{'Retry-After':String(Math.ceil(windowMs/1000))});return res.end(JSON.stringify({error:'Trop de tentatives. Réessayez plus tard.'}));}let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>8192)throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');const result=action==='register'?await registerAccount({db,body,hashPassword}):action==='forgot-password'?await requestPasswordReset({db,body,mailer:resetMailer}):await resetPassword({db,body,hashPassword,revokeUser});return res.end(JSON.stringify(result));
+ }
  if(url.pathname==='/api/logout' && req.method==='POST') {
  sessions.delete(token);res.setHeader('Set-Cookie',`${cookieName}=; Max-Age=0${cookieOptions}`);res.setHeader('Content-Type','application/json');return res.end('{}');
  }
  const currentUser=localOnly?{id:0,name:'Développement local',username:'local',role:'admin',active:1}:db.prepare('SELECT * FROM users WHERE id=?').get(sessions.get(token)?.userId||-1);
  if(!localOnly && !currentUser?.active) sessions.delete(token);
  if(url.pathname==='/login' && req.method==='GET') {
- if(localOnly || sessions.has(token)){res.writeHead(303,{Location:'/'});return res.end();}
+ if((localOnly || sessions.has(token))&&!url.searchParams.has('reset')){res.writeHead(303,{Location:'/'});return res.end();}
  res.setHeader('Content-Type','text/html; charset=utf-8');return res.end(versionHtml(fs.readFileSync(path.join(__dirname,'public/login.html'),'utf8'),appRelease));
  }
  const loginAsset=['/login.js','/style.css'].includes(url.pathname) && req.method==='GET';
@@ -166,13 +175,15 @@ const server=http.createServer(async(req,res)=>{
  res.setHeader('Content-Disposition',"attachment; filename*=UTF-8''"+encodeURIComponent(attachment.name));
  return res.end(Buffer.from(attachment.content));
  }
- if(req.method==='GET' && url.pathname==='/api/state'){syncRecurring(db);const principal=principalJumiaState(list,db.prepare('SELECT access_profile,jumia_store_ids FROM users').all());return res.end(JSON.stringify(Object.fromEntries([...kinds.map(k=>[k,currentUser.role!=='admin'&&['delegateProducts','delegateSuppliers','delegatePurchases','jumiaDeliveryRequests','delegateDeliveryTariffs','delegateDeliveryBills'].includes(k)?[]:principal.read(k)]),['recurringCharges',db.prepare('SELECT * FROM recurring_charges ORDER BY id').all().map(x=>({id:x.id,label:x.label,category:x.category,amount:x.amount_cents/100,active:!!x.active,startMonth:x.start_month,lastMonth:x.last_month,supplierId:x.supplier_id||null,supplierName: list('suppliers').find(s=>s.id===x.supplier_id)?.name||''}))],['expenseLifecycleHistory',currentUser.role==='admin'?db.prepare('SELECT id,expense_id AS expenseId,action,reason,actor,at,snapshot FROM expense_lifecycle_history ORDER BY id DESC').all().map(x=>({...x,snapshot:JSON.parse(x.snapshot)})):[]],['recordAudit',currentUser.role==='admin'?db.prepare('SELECT id,kind,record_id AS recordId,action,actor,at,reason,before_data,after_data FROM record_audit ORDER BY id DESC').all().map(x=>({...x,before:JSON.parse(x.before_data),after:JSON.parse(x.after_data),before_data:undefined,after_data:undefined})):[]],['delegateManagementOrders',currentUser.role==='admin'?principal.managementOrders:[]],['delegateManagementStores',currentUser.role==='admin'?principal.managementStores:[]],['currentUser',publicUser(currentUser)],['users',currentUser.role==='admin'?db.prepare('SELECT id,username,name,role,active,access_profile,jumia_store_ids FROM users ORDER BY id').all().map(publicUser):[]],['settings',JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data || '{}')]])));}
+ if(req.method==='GET' && url.pathname==='/api/state'){syncRecurring(db);const principal=principalJumiaState(list,db.prepare('SELECT access_profile,jumia_store_ids FROM users').all());return res.end(JSON.stringify(Object.fromEntries([...kinds.map(k=>[k,currentUser.role!=='admin'&&['delegateProducts','delegateSuppliers','delegatePurchases','jumiaDeliveryRequests','delegateDeliveryTariffs','delegateDeliveryBills'].includes(k)?[]:principal.read(k)]),['recurringCharges',db.prepare('SELECT * FROM recurring_charges ORDER BY id').all().map(x=>({id:x.id,label:x.label,category:x.category,amount:x.amount_cents/100,active:!!x.active,startMonth:x.start_month,lastMonth:x.last_month,supplierId:x.supplier_id||null,supplierName: list('suppliers').find(s=>s.id===x.supplier_id)?.name||''}))],['expenseLifecycleHistory',currentUser.role==='admin'?db.prepare('SELECT id,expense_id AS expenseId,action,reason,actor,at,snapshot FROM expense_lifecycle_history ORDER BY id DESC').all().map(x=>({...x,snapshot:JSON.parse(x.snapshot)})):[]],['recordAudit',currentUser.role==='admin'?db.prepare('SELECT id,kind,record_id AS recordId,action,actor,at,reason,before_data,after_data FROM record_audit ORDER BY id DESC').all().map(x=>({...x,before:JSON.parse(x.before_data),after:JSON.parse(x.after_data),before_data:undefined,after_data:undefined})):[]],['delegateManagementOrders',currentUser.role==='admin'?principal.managementOrders:[]],['delegateManagementStores',currentUser.role==='admin'?principal.managementStores:[]],['currentUser',publicUser(currentUser)],['users',currentUser.role==='admin'?db.prepare('SELECT id,username,name,email,approval_status,requested_at,role,active,access_profile,jumia_store_ids FROM users ORDER BY id').all().map(publicUser):[]],['passwordResetEmailReady',currentUser.role==='admin'&&resetMailer.ready],['settings',JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data || '{}')]])));}
  if(req.method==='GET'&&url.pathname==='/api/jumiaBrands'){const q=(url.searchParams.get('q')||'').trim(),requested=Number(url.searchParams.get('offset')||0),offset=Number.isSafeInteger(requested)&&requested>=0?requested:0;const total=db.prepare('SELECT COUNT(*) AS n FROM jumia_brands').get().n;let rows=[],matched=0;if(!q){matched=total;rows=db.prepare('SELECT * FROM jumia_brands ORDER BY name,id LIMIT 50 OFFSET ?').all(offset);}else if(q.length>=3){const pattern='%'+q.replace(/[\\%_]/g,'')+'%';matched=db.prepare('SELECT COUNT(*) AS n FROM jumia_brands WHERE name LIKE ? OR code=?').get(pattern,q).n;rows=db.prepare('SELECT * FROM jumia_brands WHERE name LIKE ? OR code=? ORDER BY name,id LIMIT 50 OFFSET ?').all(pattern,q,offset);}if(isJumiaDelegate(currentUser)){const own=new Set(list('delegateBrandOwnership').filter(r=>r.ownerId===currentUser.id).map(r=>r.brandId));rows=rows.map(r=>({...r,delegateEditable:own.has(r.id)}));}return res.end(JSON.stringify({rows,total,matched,offset}));}
  let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>(['/api/jumiaBrands','/api/jumiaCatalogImports','/api/jumiaDelegateWorkspace','/api/jumiaDeliveryRequests'].includes(url.pathname)?17000000:url.pathname==='/api/expensePayments'?7500000:['/api/products','/api/jumiaCategories','/api/jumiaDelegateProducts'].includes(url.pathname)?4500000:['/api/jumiaReports','/api/jumiaOrderImports','/api/jumiaDelegateImports','/api/jumiaDelegateStockExport','/api/jumiaFuelAnalysis'].includes(url.pathname)?4500000:1000000))throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');let productImage=null;
+ if(url.pathname==='/api/user-approval'&&req.method==='POST'){if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs'}));}const result=reviewAccount({db,body,actor:currentUser});revokeUser(body.id);return res.end(JSON.stringify(result));}
  if(url.pathname==='/api/users' && req.method==='POST') {
  if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}
  const existing=body.id?db.prepare('SELECT * FROM users WHERE id=?').get(Number(body.id)):null;
  if(body.id && !existing)throw Error('Compte introuvable');
+ if(existing&&existing.approval_status!=='approved'&&body.active)throw Error('Acceptez d’abord cette inscription depuis la liste des utilisateurs');const email=normalizeEmail(body.email??existing?.email);
  const userName=typeof body.username==='string'?body.username.trim():'';
  const name=typeof body.name==='string'?body.name.trim():'';
  if(!/^[a-zA-Z0-9_.@-]{3,80}$/.test(userName)||!name||name.length>100||!['admin','user','jumia_delegate'].includes(body.role)||typeof body.active!=='boolean')throw Error('Informations utilisateur invalides');
@@ -183,10 +194,10 @@ const server=http.createServer(async(req,res)=>{
  db.exec('BEGIN IMMEDIATE');try {
  const latest=existing?db.prepare('SELECT * FROM users WHERE id=?').get(existing.id):null;
  if(latest?.role==='admin' && latest.active && (body.role!=='admin'||!body.active) && db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='admin' AND active=1").get().n<=1)throw Error('Conservez au moins un administrateur actif');
- if(existing)db.prepare('UPDATE users SET username=?,name=?,password_hash=?,role=?,active=?,access_profile=?,jumia_store_ids=? WHERE id=?').run(userName,name,hash,storedRole,Number(body.active),profile,JSON.stringify(storeIds),existing.id);
- else db.prepare('INSERT INTO users(username,name,password_hash,role,active,access_profile,jumia_store_ids,catalog_seen_id) VALUES(?,?,?,?,?,?,?,?)').run(userName,name,hash,storedRole,Number(body.active),profile,JSON.stringify(storeIds),list('products').reduce((n,p)=>Math.max(n,p.id),0));
+ if(existing)db.prepare('UPDATE users SET username=?,name=?,password_hash=?,role=?,active=?,access_profile=?,jumia_store_ids=?,email=? WHERE id=?').run(userName,name,hash,storedRole,Number(body.active),profile,JSON.stringify(storeIds),email,existing.id);
+ else db.prepare('INSERT INTO users(username,name,password_hash,role,active,access_profile,jumia_store_ids,catalog_seen_id,email) VALUES(?,?,?,?,?,?,?,?,?)').run(userName,name,hash,storedRole,Number(body.active),profile,JSON.stringify(storeIds),list('products').reduce((n,p)=>Math.max(n,p.id),0),email);
  db.exec('COMMIT');
- }catch(error){db.exec('ROLLBACK');if(error.message.includes('UNIQUE'))throw Error('Ce nom de connexion existe déjà');throw error;}
+ }catch(error){db.exec('ROLLBACK');if(error.message.includes('UNIQUE'))throw Error('Ce nom de connexion ou cet email existe déjà');throw error;}
  if(existing)revokeUser(existing.id);
  return res.end('{}');
  }
@@ -396,6 +407,6 @@ const server=http.createServer(async(req,res)=>{
  }
  const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js','jumia-delegate.js','delegate-purchases.js','jumia-delivery-requests.js','delivery-pricing.js','jumia-temporary-math.js','jumia-temporary.js'].includes(file)){res.writeHead(404);return res.end();}
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');const content=fs.readFileSync(path.join(__dirname,'public',file));res.end(file.endsWith('.html')?versionHtml(content.toString('utf8'),appRelease):content);
- }catch(e){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}
+ }catch(e){res.writeHead(e.status||400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}
 });
 initialization.then(()=>server.listen(process.env.PORT||3000,process.env.HOST||'127.0.0.1',()=>console.log('GestStock démarré'))).catch(error=>{console.error(error.message);process.exit(1);});

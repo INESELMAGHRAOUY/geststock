@@ -1,6 +1,6 @@
 # GestStock
 
-Application web de gestion commerciale, en français. Node.js >= 22.13, sans dépendances externes.
+Application web de gestion commerciale, en français. Node.js >= 22.13. Dépendances installées par npm.
 
 ## Démarrage
 
@@ -48,7 +48,7 @@ Pour Marwane : dans **Utilisateurs**, cliquer **Préparer le compte Marwane**, d
 
 Au premier démarrage sur une base sans comptes, `ADMIN_USER` et `ADMIN_PASSWORD` initialisent le premier administrateur. Sur une base contenant déjà des comptes, ces variables ne réinitialisent aucun mot de passe. Le menu Utilisateurs, accessible aux administrateurs, permet de créer des comptes, modifier le nom et le rôle, réinitialiser le mot de passe et désactiver un compte. Une modification révoque les sessions du compte concerné ; un utilisateur désactivé ne peut plus se connecter. Le dernier administrateur actif ne peut pas être désactivé ou rétrogradé. Les mots de passe sont stockés sous forme de hash scrypt avec un sel propre à chaque mot de passe, et ne sont jamais renvoyés à l’interface.
 
-Les comptes sont conservés dans la même base permanente que les données commerciales et inclus dans les nouvelles sauvegardes. Une sauvegarde antérieure à la création des utilisateurs ne contient pas ces comptes. Il n’y a pas encore de récupération automatique par email ; conserver au moins un accès administrateur et les sauvegardes.
+Les comptes sont conservés dans la même base permanente que les données commerciales et inclus dans les nouvelles sauvegardes. Une sauvegarde antérieure à la création des utilisateurs ne contient pas ces comptes. La récupération par email est disponible après configuration SMTP ; conserver au moins un accès administrateur et les sauvegardes.
 
 ## Charges et paiements
 
@@ -97,3 +97,22 @@ Demandes de dépôt Jumia : le délégué sélectionne des commandes de sa bouti
 Tarifs du dépôt : Administration → Utilisateurs → Tarifs livraison / emballage. L’administrateur définit les lots de commandes, leur prix de livraison et le prix d’emballage par commande, pour le délégué globalement ou boutique par boutique. Un lot commencé est facturé intégralement. Aucun prix n’est appliqué avant paramétrage. Les nouvelles demandes conservent leur tarif ; dans Dépôts des délégués, sélectionner les dépôts achevés d’un même délégué permet de calculer puis valider un relevé de frais avec les lots regroupés selon le mode retenu. Les relevés validés sont immuables face aux changements de tarifs et ne créent pas d’encaissement.
 
 Calcul provisoire Jumia (administrateur et délégués) : lecture locale d’un export commandes et de relevés transactions CSV. Les résultats séparent PAID annoncé, non PAID, montant bancaire saisi, remboursements et ventes non retrouvées dans les relevés. Le net hors relevés est estimé uniquement si commission et shipping sont saisis ; un relevé incomplet ne prouve pas une dette totale. Les fichiers et calculs ne sont ni envoyés au serveur ni enregistrés dans un stockage du navigateur, et sont effacés en quittant la page.
+
+## Inscription et récupération du mot de passe
+
+La page de connexion propose **Créer un compte** et **Mot de passe oublié**. Une inscription crée exclusivement un **Délégué Jumia**, inactif et sans boutiques affectées. Dans **Administration → Utilisateurs**, l’administrateur choisit **Accepter** ou **Refuser**. Modifier un compte en attente ne permet pas de l’activer sans cette décision. Les comptes existants restent approuvés lors de la migration. Le champ Email peut être renseigné pour les comptes existants depuis Utilisateurs ; une adresse ne peut être partagée entre plusieurs comptes.
+
+Pour envoyer les liens, définir dans Hostinger les variables suivantes, puis redémarrer le serveur :
+
+| Variable | Valeur |
+| --- | --- |
+| `APP_PUBLIC_URL` | URL HTTPS publique du site, sans chemin, ex. `https://gestion.votre-domaine.ma` |
+| `SMTP_HOST` | Serveur SMTP fourni par votre messagerie Hostinger |
+| `SMTP_PORT` | `465` (TLS direct) ou `587` (STARTTLS obligatoire) |
+| `SMTP_USER` | Adresse / identifiant SMTP de la boîte expéditrice |
+| `SMTP_PASS` | Mot de passe SMTP, uniquement dans les secrets d’hébergement |
+| `SMTP_FROM` | Adresse email expéditrice autorisée par cette boîte |
+
+Ne pas mettre ces secrets dans GitHub. Sans configuration complète, la connexion et les inscriptions fonctionnent, mais Mot de passe oublié indique que le service email est indisponible. Le statut de configuration est visible dans Utilisateurs. Les liens ne sont envoyés qu’aux comptes actifs et approuvés, à leur email enregistré. La réponse ne confirme pas l’existence d’une adresse.
+
+Le lien expire après 30 minutes, contient un jeton aléatoire dans le fragment de l’URL et ne peut être utilisé qu’une fois. Seul le hash du jeton est conservé dans SQLite ; ni le lien ni le jeton ne sont renvoyés par l’API. Changer le mot de passe ou l’email rend les anciens liens invalides. Une réinitialisation révoque toutes les sessions du compte et ne modifie jamais son approbation ni ses droits. Les endpoints publics limitent les tentatives par adresse réseau ; derrière un proxy partagé, cette limite peut concerner plusieurs personnes. Les tests simulent l’envoi SMTP sans envoyer d’email réel.
