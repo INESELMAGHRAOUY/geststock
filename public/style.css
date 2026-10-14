@@ -34,4 +34,6 @@ aside{overflow-y:auto}aside nav{display:block;margin:24px -22px}aside nav button
 
 .login-card form[hidden],.login-card .login-links[hidden]{display:none}.login-links{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}.login-card .auth-error{color:#b54830;margin:0;min-height:24px}.login-card #auth-notice{color:#087f83;padding:12px;background:#e1f3ed;border-radius:8px}.account-pending{color:#906416}
 
-.google-login-button{display:block;text-align:center;padding:14px;margin-top:20px;border:1px solid #c9d8e2;border-radius:8px;text-decoration:none;background:white;color:#11293d}.google-login-button[hidden]{display:none}
+.google-login-button{display:flex;align-items:center;justify-content:center;gap:12px;text-align:center;padding:14px;margin-top:20px;border:1px solid #c9d8e2;border-radius:8px;text-decoration:none;background:white;color:#11293d}.google-login-button[hidden]{display:none}
+
+.google-login-button .google-logo{flex-shrink:0}
