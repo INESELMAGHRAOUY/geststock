@@ -37,3 +37,5 @@ aside{overflow-y:auto}aside nav{display:block;margin:24px -22px}aside nav button
 .google-login-button{display:flex;align-items:center;justify-content:center;gap:12px;text-align:center;padding:14px;margin-top:20px;border:1px solid #c9d8e2;border-radius:8px;text-decoration:none;background:white;color:#11293d}.google-login-button[hidden]{display:none}
 
 .google-login-button .google-logo{flex-shrink:0}
+
+.jumia-report-layout{display:grid;grid-template-columns:minmax(220px,360px) minmax(240px,1fr);gap:24px;align-items:center}.jumia-report-layout svg{width:100%;max-width:360px;height:auto}.jumia-report-legend{list-style:none;padding:0;margin:0}.jumia-report-legend li{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #e3ebf1}.jumia-report-legend strong{margin-left:auto;white-space:nowrap}.jumia-report-color{width:16px;height:16px;border-radius:3px;flex-shrink:0}@media(max-width:640px){.jumia-report-layout{grid-template-columns:1fr}.jumia-report-layout svg{margin:auto}.jumia-report-legend li{flex-wrap:wrap}}
