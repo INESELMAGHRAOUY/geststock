@@ -1,3 +1,4 @@
+const {productType}=require('./public/product-type');
 const {supplierUrl,createSupplierStock}=require('./supplier-stock');
 const {invoicePdf}=require('./invoice-pdf');
 const {readSalesHistory}=require('./sales-history');
@@ -363,6 +364,8 @@ const server=http.createServer(async(req,res)=>{
  if(req.method==='DELETE')throw Error('Utilisez Désactiver : aucun élément ne doit être supprimé');
  if(req.method!=='POST')throw Error('Méthode non autorisée');
  if(kind==='products'){
+ if(body.productType!==undefined&&!['PARA','ECOM'].includes(body.productType))throw Error('Type de produit invalide');
+ body.productType=body.productType||productType({...list('products').find(p=>p.id===body.id),...body});
  if(body.supplierUrl!==undefined)body.supplierUrl=supplierUrl(body.supplierUrl);
  if(body.parabudgetUrl!==undefined)body.parabudgetUrl=supplierUrl(body.parabudgetUrl,'parabudget');
  if(body.imageUrl){let url;try{url=new URL(body.imageUrl);}catch{throw Error('URL image invalide');}if(url.protocol!=='https:'||url.hostname!=='vendorcenter.jumia.com')throw Error('URL image Jumia invalide');}
@@ -433,7 +436,7 @@ const server=http.createServer(async(req,res)=>{
  if(kind==='products'){db.exec('BEGIN');try{if(productImage){body.imageId=Number(db.prepare('INSERT INTO product_images(name,mime,content) VALUES(?,?,?)').run(productImage.name,productImage.mime,productImage.bytes).lastInsertRowid);body.imageName=productImage.name;}const id=save(kind,{...body,active:true});db.exec('COMMIT');return res.end(JSON.stringify({id}));}catch(e){db.exec('ROLLBACK');throw e;}}
  return res.end(JSON.stringify({id:save(kind,{...body,active:true})}));
  }
- const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','login-history.js','sales-history.js','whatsapp.js','invoice-share.js','supplier-stock.js','product-autocomplete.js','product-pickers.js','google-complete.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js','jumia-delegate.js','delegate-purchases.js','jumia-delivery-requests.js','delivery-pricing.js','jumia-temporary-math.js','jumia-temporary.js'].includes(file)){res.writeHead(404);return res.end();}
+ const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','login-history.js','sales-history.js','whatsapp.js','invoice-share.js','supplier-stock.js','product-autocomplete.js','product-pickers.js','product-type.js','google-complete.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js','jumia-delegate.js','delegate-purchases.js','jumia-delivery-requests.js','delivery-pricing.js','jumia-temporary-math.js','jumia-temporary.js'].includes(file)){res.writeHead(404);return res.end();}
  if(file==='index.html')recordVisit({db,req,res,user:currentUser,page:'/',secure:cookieName.startsWith('__Host-')});
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');const content=fs.readFileSync(path.join(__dirname,'public',file));res.end(file.endsWith('.html')?versionHtml(content.toString('utf8'),appRelease):content);
  }catch(e){res.writeHead(e.status||400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}
