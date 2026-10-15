@@ -35,6 +35,17 @@ test('authentification, origine et sauvegarde SQLite',async()=>{
  assert.equal((await fetch(url+'/api/banks',{method:'POST',headers:{...staffAuth,Origin:url},body:JSON.stringify({name:'Banque',active:true})})).status,403);
  assert.equal((await fetch(url+'/api/products',{method:'POST',headers:{...staffAuth,Origin:url},body:JSON.stringify({name:'Staff article',price:10,stock:2,min:1})})).status,200);
  state=await(await fetch(url+'/api/state',{headers:staffAuth})).json();assert.deepEqual(state.users,[]);
+ // A negative calculated stock must not block metadata/link edits; stock remains derived.
+ const seed=new DatabaseSync(path.join(dir,'stock.db'));
+ const negativeId=Number(seed.prepare('INSERT INTO records(kind,data) VALUES(?,?)').run('products',JSON.stringify({name:'Negative stock',initialStock:0,stock:0,price:0,min:5,active:true})).lastInsertRowid);
+ seed.prepare('INSERT INTO records(kind,data) VALUES(?,?)').run('documents',JSON.stringify({type:'Facture',active:true,lines:[{productId:negativeId,qty:2,price:0}],total:0,tax:0}));seed.close();
+ const editNegative=body=>fetch(url+'/api/products',{method:'POST',headers:{...auth,Origin:url,'Content-Type':'application/json'},body:JSON.stringify(body)});
+ const negativeEdit={id:negativeId,name:'Negative stock edited',price:0,min:5,stock:-2,expectedStock:-2,supplierUrl:'https://beautymarket.ma/products/test-produit'};
+ assert.equal((await editNegative(negativeEdit)).status,200);
+ const savedNegative=(await(await fetch(url+'/api/state',{headers:auth})).json()).products.find(p=>p.id===negativeId);assert.equal(savedNegative.stock,-2);assert.equal(savedNegative.supplierUrl,negativeEdit.supplierUrl);
+ assert.equal((await editNegative({...negativeEdit,stock:0})).status,400);
+ assert.equal((await editNegative({...negativeEdit,expectedStock:0})).status,400);
+ assert.equal((await editNegative({name:'Invalid initial stock',price:0,min:5,stock:-2})).status,400);
  const admin= (await(await fetch(url+'/api/state',{headers:auth})).json()).users.find(u=>u.role==='admin');
  assert.equal((await changeUser(auth,{...admin,role:'user',password:''})).status,400);
  assert.equal((await changeUser(auth,{...employee,id,active:false,password:''})).status,200);
