@@ -248,7 +248,7 @@ const server=http.createServer(async(req,res)=>{
  if(url.pathname==='/api/jumiaDeliveryRequests'){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleDeliveryRequest({db,body,user:currentUser,list,save})));}
  if(url.pathname==='/api/jumiaDelegateWorkspace'){if(req.method!=='POST'||!isJumiaDelegate(currentUser))throw Error('Compte délégué requis');return res.end(JSON.stringify(handleWorkspace({db,body,user:currentUser,list,save,kinds})));}
  if(['/api/jumiaDelegateOrders','/api/jumiaDelegateListings','/api/jumiaDelegateStores','/api/jumiaDelegateImports','/api/jumiaDelegateStockExport'].includes(url.pathname)){if(req.method!=='POST'||!isJumiaDelegate(currentUser)){res.writeHead(403);return res.end(JSON.stringify({error:'Compte délégué requis'}));}return res.end(JSON.stringify(delegateMutation({db,body,user:currentUser,list,save,kind:url.pathname.split('/')[2]})));}
- if(url.pathname==='/api/supplierStock'){if(req.method!=='POST'||!Number.isSafeInteger(body.productId))throw Error('Article invalide');return res.end(JSON.stringify(await supplierStock.check(body.productId)));}
+ if(url.pathname==='/api/supplierStock'){if(req.method!=='POST'||!Number.isSafeInteger(body.productId))throw Error('Article invalide');return res.end(JSON.stringify(await supplierStock.check(body.productId,body.source||'beautymarket')));}
  const kind=url.pathname.split('/')[2];if(['delegateProducts','delegateSuppliers'].includes(kind)){res.writeHead(403);return res.end(JSON.stringify({error:'Utilisez les modules personnels du délégué'}));}if(kind==='settings'){if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}db.prepare('INSERT INTO settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify(body));return res.end('{}');}
  if(kind==='jumiaFuelAnalysis'){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(analyzeFuelOrders(body,list)));}
  if(kind==='fuelExpenses'){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleFuel({db,body,user:currentUser,list,save})));}
@@ -364,6 +364,7 @@ const server=http.createServer(async(req,res)=>{
  if(req.method!=='POST')throw Error('Méthode non autorisée');
  if(kind==='products'){
  if(body.supplierUrl!==undefined)body.supplierUrl=supplierUrl(body.supplierUrl);
+ if(body.parabudgetUrl!==undefined)body.parabudgetUrl=supplierUrl(body.parabudgetUrl,'parabudget');
  if(body.imageUrl){let url;try{url=new URL(body.imageUrl);}catch{throw Error('URL image invalide');}if(url.protocol!=='https:'||url.hostname!=='vendorcenter.jumia.com')throw Error('URL image Jumia invalide');}
  delete body.imageId;delete body.imageName;
  if(body.image)productImage=readProductImage(body.image);delete body.image;
