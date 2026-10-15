@@ -364,7 +364,7 @@ const server=http.createServer(async(req,res)=>{
  if(req.method==='DELETE')throw Error('Utilisez Désactiver : aucun élément ne doit être supprimé');
  if(req.method!=='POST')throw Error('Méthode non autorisée');
  if(kind==='products'){
- if(body.productType!==undefined&&!['PARA','ECOM'].includes(body.productType))throw Error('Type de produit invalide');
+ if(body.productType!==undefined&&!['PARA','ECOM','PROF'].includes(body.productType))throw Error('Type de produit invalide');
  body.productType=body.productType||productType({...list('products').find(p=>p.id===body.id),...body});
  if(body.supplierUrl!==undefined)body.supplierUrl=supplierUrl(body.supplierUrl);
  if(body.parabudgetUrl!==undefined)body.parabudgetUrl=supplierUrl(body.parabudgetUrl,'parabudget');
