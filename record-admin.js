@@ -1,3 +1,4 @@
+const {assertUniquePurchaseReference}=require('./public/purchase-reference');
 const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
 function setupRecordAudit(db){db.exec('CREATE TABLE IF NOT EXISTS record_audit(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,record_id INTEGER NOT NULL,action TEXT NOT NULL,actor TEXT NOT NULL,at TEXT NOT NULL,reason TEXT NOT NULL,before_data TEXT NOT NULL,after_data TEXT NOT NULL)');}
 function auditRecord(db,kind,before,after,user,action,reason){db.prepare('INSERT INTO record_audit(kind,record_id,action,actor,at,reason,before_data,after_data) VALUES(?,?,?,?,?,?,?,?)').run(kind,before.id,action,user.name,new Date().toISOString(),reason||'',JSON.stringify(before),JSON.stringify(after));}
@@ -36,6 +37,7 @@ function handleRecordAdmin({db,body,user,list,save}){
  Object.assign(updated,{beneficiary:data.beneficiary.trim(),amount:data.amount,date:data.date,reference:String(data.reference||''),city:'Rabat',words:require('./public/amount-words').amountToWords(data.amount)});
  }else throw Error('Utilisez le formulaire Modifier de cet élément');
  }
+ if(kind==='movements')assertUniquePurchaseReference(list('movements'),updated,old.id);
  if(['movements','documents'].includes(kind)){
  const side=kind==='movements'?'supplier':'client';const allocations=list('settlements').filter(p=>p.side===side&&p.active!==false).flatMap(p=>p.allocations).filter(a=>a.billId===old.id);
  if(allocations.length){if(updated.active===false)throw Error('Désactivez les règlements liés avant de désactiver ce bon');if(allocations.reduce((n,a)=>n+a.amountCents,0)>Math.round((updated.total||0)*100))throw Error('Le total ne peut pas être inférieur aux règlements liés');const key=side==='supplier'?'supplierId':'clientId';if((old[key]||0)!==(updated[key]||0))throw Error('Désactivez les règlements liés avant de changer le tiers');}

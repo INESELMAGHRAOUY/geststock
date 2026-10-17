@@ -1,3 +1,4 @@
+const {assertUniquePurchaseReference}=require('./public/purchase-reference');
 const {handleReportUpdate}=require('./jumia-report-update');
 const {productType}=require('./public/product-type');
 const {supplierUrl,createSupplierStock}=require('./supplier-stock');
@@ -425,7 +426,7 @@ const server=http.createServer(async(req,res)=>{
  const supplier=body.supplierId?list('suppliers').find(s=>s.id===body.supplierId&&s.active!==false):null;if(body.supplierId&&!supplier)throw Error('Fournisseur introuvable');
  body.status=body.status||'received';body.supplierName=supplier?.name||'';
  const lines=purchaseLines(body,list('products'));
- db.exec('BEGIN');try{const id=save(kind,{...body,lines,total:lines.reduce((sum,l)=>sum+l.total,0),active:true,name:lines.map(l=>l.name).join(', '),date:new Date().toISOString()});db.exec('COMMIT');return res.end(JSON.stringify({id}));}catch(e){db.exec('ROLLBACK');throw e;}}
+ db.exec('BEGIN IMMEDIATE');try{assertUniquePurchaseReference(list('movements'),body);body.reference=String(body.reference||'').trim();const id=save(kind,{...body,lines,total:lines.reduce((sum,l)=>sum+l.total,0),active:true,name:lines.map(l=>l.name).join(', '),date:new Date().toISOString()});db.exec('COMMIT');return res.end(JSON.stringify({id}));}catch(e){db.exec('ROLLBACK');throw e;}}
  if(kind==='cheques'){
  if(!body.beneficiary?.trim()||!Number.isFinite(body.amount)||body.amount<=0)throw Error('Chèque invalide');
  const currency=JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data||'{}').currency||'MAD';
@@ -440,7 +441,7 @@ const server=http.createServer(async(req,res)=>{
  if(kind==='products'){db.exec('BEGIN');try{if(productImage){body.imageId=Number(db.prepare('INSERT INTO product_images(name,mime,content) VALUES(?,?,?)').run(productImage.name,productImage.mime,productImage.bytes).lastInsertRowid);body.imageName=productImage.name;}const id=save(kind,{...body,active:true});db.exec('COMMIT');return res.end(JSON.stringify({id}));}catch(e){db.exec('ROLLBACK');throw e;}}
  return res.end(JSON.stringify({id:save(kind,{...body,active:true})}));
  }
- const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','login-history.js','sales-history.js','whatsapp.js','invoice-share.js','supplier-stock.js','product-autocomplete.js','product-pickers.js','product-type.js','product-image-controls.js','google-complete.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js','jumia-delegate.js','delegate-purchases.js','jumia-delivery-requests.js','delivery-pricing.js','jumia-temporary-math.js','jumia-temporary.js'].includes(file)){res.writeHead(404);return res.end();}
+ const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','login-history.js','sales-history.js','whatsapp.js','invoice-share.js','supplier-stock.js','product-autocomplete.js','product-pickers.js','product-type.js','product-image-controls.js','purchase-reference.js','google-complete.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js','jumia-delegate.js','delegate-purchases.js','jumia-delivery-requests.js','delivery-pricing.js','jumia-temporary-math.js','jumia-temporary.js'].includes(file)){res.writeHead(404);return res.end();}
  if(file==='index.html')recordVisit({db,req,res,user:currentUser,page:'/',secure:cookieName.startsWith('__Host-')});
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');const content=fs.readFileSync(path.join(__dirname,'public',file));res.end(file.endsWith('.html')?versionHtml(content.toString('utf8'),appRelease):content);
  }catch(e){res.writeHead(e.status||400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}
