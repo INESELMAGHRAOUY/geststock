@@ -78,6 +78,14 @@ test('hub performance counts actual deposits once per order and groups unidentif
  const {jumiaHubStats}=require('../public/jumia-math');
  const order=(hubId,statuses,dispatched=false)=>({hubId,lines:statuses.map(status=>({status,dispatched}))});
  const rows=jumiaHubStats([order(1,['Livré','Livré']),order(1,['Annulé']),order(1,['Annulé'],true),order(2,['Expédié']),order(2,['En attente']),order(null,['Retourné'])],[{id:1,name:'Hub A',city:'Rabat'},{id:2,name:'Hub B',city:'Casa'}]);
- assert.equal(rows[0].name,'Hub A');assert.equal(rows[0].orders,3);assert.equal(rows[0].deposited,2);assert.equal(rows[0].delivered,1);assert.equal(rows[0].cancelled,2);assert.equal(rows[0].deliveryRate,50);assert.equal(rows[0].share,50);assert.equal(rows.find(h=>!h.identified).deposited,1);assert.equal(rows.find(h=>h.name==='Hub B').inTransit,1);
+ const hubA=rows.find(h=>h.name==='Hub A');assert.equal(hubA.orders,1);assert.equal(hubA.deposited,1);assert.equal(hubA.delivered,1);assert.equal(hubA.cancelled,0);assert.equal(hubA.deliveryRate,100);assert.ok(Math.abs(hubA.share-100/3)<0.0001);assert.equal(rows.find(h=>!h.identified).deposited,1);assert.equal(rows.find(h=>h.name==='Hub B').inTransit,1);
  assert.deepEqual(jumiaHubStats([]),[]);
+});
+
+test('hub statistics exclude dispatched cancellations and ignore cancelled lines in mixed orders',()=>{
+ const {jumiaHubStats}=require('../public/jumia-math');
+ const order=lines=>({hubId:1,lines});
+ assert.deepEqual(jumiaHubStats([order([{status:'Annulé',dispatched:true}])]),[]);
+ const [hub]=jumiaHubStats([order([{status:'Annulé',dispatched:true},{status:'En attente'}])]);
+ assert.equal(hub.orders,1);assert.equal(hub.deposited,0);assert.equal(hub.deliveryRate,null);
 });

@@ -18,9 +18,10 @@
  function jumiaHubStats(orders,hubs=[]){
  const groups=new Map(),normalize=v=>String(v||'').trim().replace(/\s+/g,' ').toLowerCase();
  for(const order of orders){
+  const lines=(order.lines||[]).filter(l=>l.status!=='Annulé');if(!lines.length)continue;
   const hub=hubs.find(h=>h.id===order.hubId),name=hub?.name||order.hubName||'Hub non renseigné',city=hub?.city||order.hubCity||'';
   const key=order.hubId?'id:'+order.hubId:normalize(name+'|'+city),g=groups.get(key)||{key,name,city,identified:Boolean(order.hubId||order.hubName),orders:0,deposited:0,delivered:0,returned:0,failed:0,cancelled:0,inTransit:0};
-  const lines=order.lines||[],has=status=>lines.some(l=>l.status===status);
+  const has=status=>lines.some(l=>l.status===status);
   g.orders++;if(lines.some(l=>l.dispatched||['Expédié','Livré','Retourné','La livraison a échoué'].includes(l.status)))g.deposited++;
   if(has('Livré'))g.delivered++;if(has('Retourné'))g.returned++;if(has('La livraison a échoué'))g.failed++;if(has('Annulé'))g.cancelled++;if(has('Expédié'))g.inTransit++;
   groups.set(key,g);
