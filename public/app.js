@@ -172,8 +172,8 @@ function productTelegramLink(product){if(productType(product)!=='ECOM')return '�
 function productSizeSystem(product){return ['clothing','shoes','socks','custom'].includes(product.sizeSystem)?product.sizeSystem:product.size&&!['XS','S','M','L','XL','XXL','3XL','Taille unique'].includes(product.size)?'custom':'clothing';}
 function productSizeChoices(system,value=''){
  const presets={clothing:['XS','S','M','L','XL','XXL','3XL','Taille unique'],shoes:Array.from({length:18},(_,i)=>String(30+i)),socks:['19–22','23–26','27–30','31–34','35–38','39–42','43–46','Taille unique'],custom:[]};
- const sizes=presets[system]||[];if(value&&!sizes.includes(value)&&system!=='custom')sizes.push(value);
- return `<div class="product-size-chips" role="group" aria-label="Choisir le ${system==='shoes'?'pointure':'format de taille'}">${sizes.map(size=>`<label class="product-size-chip"><input type="radio" name="size" value="${esc(size)}" ${size===value?'checked':''} required><span>${esc(size)}</span></label>`).join('')}</div><label class="product-custom-size" ${system==='custom'?'':'hidden'}>Votre format de taille<input name="${system==='custom'?'size':'customSize'}" type="text" maxlength="80" value="${esc(system==='custom'?value:'')}" placeholder="Ex. 36–40, 6 mois, 38½" ${system==='custom'?'required':'disabled'}></label>`;
+ const sizes=presets[system]||[];for(const product of state.products||[])if(productSizeSystem(product)===system&&product.size&&!sizes.includes(product.size))sizes.push(product.size);if(value&&!sizes.includes(value)&&system!=='custom')sizes.push(value);
+ return `<div class="product-size-chips" role="group" aria-label="Choisir le ${system==='shoes'?'pointure':'format de taille'}">${sizes.map(size=>`<label class="product-size-chip"><input type="radio" name="size" value="${esc(size)}" ${size===value?'checked':''} required><span>${esc(size)}</span></label>`).join('')}</div>${system!=='custom'?`<div class="product-add-size"><label>Ajouter une taille<input type="text" data-new-product-size maxlength="80" placeholder="Ex. 48, 39–41, 4XL…" aria-label="Nouveau format de taille"></label><button type="button" class="secondary" data-add-product-size>+ Ajouter</button><small data-size-add-message role="status"></small></div>`:''}<label class="product-custom-size" ${system==='custom'?'':'hidden'}>Votre format de taille<input name="${system==='custom'?'size':'customSize'}" type="text" maxlength="80" value="${esc(system==='custom'?value:'')}" placeholder="Ex. 36–40, 6 mois, 38½" ${system==='custom'?'required':'disabled'}></label>`;
 }
 function productVariantFields(product){
  const ecom=productType(product)==='ECOM',hasSizes=product.hasSizes??Boolean(product.size),system=productSizeSystem(product);
@@ -188,3 +188,18 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('click',e=>{const button=e.target.closest('[data-product-color]');if(!button)return;const form=button.closest('form');form.elements.color.value=button.dataset.productColor;form.querySelectorAll('[data-product-color]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));});
 document.addEventListener('input',e=>{if(e.target.name!=='color'||e.target.form?.id!=='product-form')return;e.target.form.querySelectorAll('[data-product-color]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.productColor===e.target.value)));});
+
+document.addEventListener('click',e=>{
+ const button=e.target.closest('[data-add-product-size]');if(!button)return;
+ const form=button.closest('form'),input=form.querySelector('[data-new-product-size]'),value=input.value.trim(),message=form.querySelector('[data-size-add-message]');
+ if(!value){message.textContent='Écrivez la taille à ajouter.';input.focus();return;}
+ const box=form.querySelector('[data-product-size-choices]'),system=form.elements.sizeSystem.value;
+ const current=[...box.querySelectorAll('input[type="radio"][name="size"]')].map(r=>r.value);
+ const existing=current.find(v=>v.toLowerCase()===value.toLowerCase());
+ box.innerHTML=productSizeChoices(system,existing||value);
+ const chips=box.querySelector('.product-size-chips');
+ for(const size of current)if(![...chips.querySelectorAll('input')].some(r=>r.value===size))chips.insertAdjacentHTML('beforeend',`<label class="product-size-chip"><input type="radio" name="size" value="${esc(size)}" required><span>${esc(size)}</span></label>`);
+ box.querySelector('[data-size-add-message]').textContent=existing?'Taille sélectionnée.':'Taille ajoutée et sélectionnée. Enregistrez le produit pour la conserver.';
+ box.querySelector('input[type="radio"]:checked')?.focus();
+});
+document.addEventListener('keydown',e=>{if(e.target.matches('[data-new-product-size]')&&e.key==='Enter'){e.preventDefault();e.target.closest('.product-add-size').querySelector('button').click();}});
