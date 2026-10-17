@@ -50,3 +50,5 @@ aside{overflow-y:auto}aside nav{display:block;margin:24px -22px}aside nav button
 .purchase-product-thumbnail{width:56px;height:56px;object-fit:contain;background:white;border-radius:5px}.product-suggestions .purchase-product-thumbnail{float:left;margin:0 10px 4px 0}.product-suggestions button::after{content:"";display:block;clear:both}
 
 #product-audit-dialog{width:min(1400px,95vw);max-width:95vw;max-height:90vh;overflow:auto}#product-audit-dialog .cards{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+
+#product-form .product-designation{flex:1 0 100%;width:100%;min-width:0}#product-form .product-designation textarea{width:100%;min-width:0;min-height:80px;resize:vertical;line-height:1.5;font-size:15px}
