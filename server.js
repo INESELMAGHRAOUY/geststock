@@ -39,7 +39,7 @@ const crypto = require('node:crypto');
 const {handleJumia}=require('./jumia');
 const {handleSettlement}=require('./settlements');
 const {purchaseLines}=require('./purchase');
-const {stockBreakdown,initializeStock}=require('./stock');
+const {stockBreakdown,catalogueStock,initializeStock}=require('./stock');
 const {setupRecordAudit,auditRecord,handleRecordAdmin}=require('./record-admin');
 const {amountToWords}=require('./public/amount-words');
 const {setupRecurring,syncRecurring}=require('./recurring');
@@ -112,7 +112,7 @@ async function dailyBackup() {
 initialization.then(dailyBackup).catch(()=>{});
 setInterval(dailyBackup,60*60*1000).unref();
 const rawList = kind => db.prepare('SELECT id,data FROM records WHERE kind=? ORDER BY id DESC').all(kind).map(r=>({ ...JSON.parse(r.data),id:r.id}));
-const list=kind=>{const records=rawList(kind);if(kind!=='products')return records;const movements=rawList('movements'),documents=rawList('documents'),inventories=rawList('inventories'),orders=rawList('jumiaOrders');return records.map(p=>stockBreakdown(p,movements,documents,inventories,orders,rawList('delegatePurchases')));};
+const list=kind=>{const records=rawList(kind);if(kind!=='products')return records;return catalogueStock(records,rawList('movements'),rawList('documents'),rawList('inventories'),rawList('jumiaOrders'),rawList('delegatePurchases'));};
 const supplierStock=createSupplierStock({db,list});
 setInterval(()=>supplierStock.daily().catch(()=>{}),60*60*1000).unref();
 setTimeout(()=>supplierStock.daily().catch(()=>{}),3000).unref();
@@ -370,15 +370,17 @@ const server=http.createServer(async(req,res)=>{
  }
  if(req.method==='DELETE')throw Error('Utilisez Désactiver : aucun élément ne doit être supprimé');
  if(req.method!=='POST')throw Error('Méthode non autorisée');
+ let productSnapshot;
  if(kind==='products'){
- Object.assign(body,normalizeProductVariant(body,list('products')));
+ productSnapshot=list('products');
+ Object.assign(body,normalizeProductVariant(body,productSnapshot));
  if(body.quantityMode!==undefined&&!['unit','decimal'].includes(body.quantityMode))throw Error('Mode de quantité invalide');
- body.quantityMode=body.quantityMode||productQuantityMode({...list('products').find(p=>p.id===body.id),...body});
+ body.quantityMode=body.quantityMode||productQuantityMode({...productSnapshot.find(p=>p.id===body.id),...body});
  validateProductQuantity(body,body.stock);validateProductQuantity(body,body.min);
  if(body.removeImage!==undefined&&typeof body.removeImage!=='boolean')throw Error('Choix image invalide');
  removeProductImage=body.removeImage===true;delete body.removeImage;if(removeProductImage&&body.image)throw Error('Choisissez retirer ou remplacer l’image');
  if(body.productType!==undefined&&!['PARA','ECOM','PROF'].includes(body.productType))throw Error('Type de produit invalide');
- body.productType=body.productType||productType({...list('products').find(p=>p.id===body.id),...body});
+ body.productType=body.productType||productType({...productSnapshot.find(p=>p.id===body.id),...body});
  if(body.telegramUrl!==undefined)body.telegramUrl=telegramProductUrl(body.telegramUrl);
  if(body.supplierUrl!==undefined)body.supplierUrl=supplierUrl(body.supplierUrl);
  if(body.parabudgetUrl!==undefined)body.parabudgetUrl=supplierUrl(body.parabudgetUrl,'parabudget');
@@ -391,7 +393,7 @@ const server=http.createServer(async(req,res)=>{
  if(body.purchasePrice!==undefined&&(!Number.isFinite(body.purchasePrice)||body.purchasePrice<0))throw Error('Prix d’achat invalide');
  if(typeof body.name!=='string'||!body.name.trim()||![body.price,body.min].every(x=>Number.isFinite(x)&&x>=0)||!Number.isFinite(body.stock)||(body.id===undefined&&body.stock<0))throw Error('Produit invalide');
  if(body.id!==undefined){
- const existing=Number.isSafeInteger(body.id)?list('products').find(p=>p.id===body.id):null;
+ const existing=Number.isSafeInteger(body.id)?productSnapshot.find(p=>p.id===body.id):null;
  if(!existing)throw Error('Produit introuvable');
  if(body.stock!==existing.stock)throw Error('Le stock est calculé automatiquement à partir des achats et ventes');
  if(body.expectedStock!==existing.stock)throw Error('Le stock a changé. Rouvrez le produit avant de modifier.');
@@ -444,11 +446,11 @@ const server=http.createServer(async(req,res)=>{
  }
  if(body.id!==undefined){
  if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès administrateur requis'}));}
- const old=list(kind).find(x=>x.id===body.id);if(!old)throw Error('Élément introuvable');
+ const old=(productSnapshot||list(kind)).find(x=>x.id===body.id);if(!old)throw Error('Élément introuvable');
  const updated={...old,...body,active:old.active!==false,updatedAt:new Date().toISOString(),updatedBy:currentUser.name};delete updated.expectedStock;if(kind==='products'&&removeProductImage){updated.imageId=null;updated.imageName='';updated.imageUrl='';}
- db.exec('BEGIN');try{if(productImage){updated.imageId=Number(db.prepare('INSERT INTO product_images(name,mime,content) VALUES(?,?,?)').run(productImage.name,productImage.mime,productImage.bytes).lastInsertRowid);updated.imageName=productImage.name;}save(kind,updated,old.id);auditRecord(db,kind,old,updated,currentUser,'Modification','Correction via le formulaire');db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}return res.end(JSON.stringify({id:old.id}));
+ db.exec('BEGIN');try{if(productImage){updated.imageId=Number(db.prepare('INSERT INTO product_images(name,mime,content) VALUES(?,?,?)').run(productImage.name,productImage.mime,productImage.bytes).lastInsertRowid);updated.imageName=productImage.name;}save(kind,updated,old.id);auditRecord(db,kind,old,updated,currentUser,'Modification','Correction via le formulaire');db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}const result={id:old.id};if(kind==='products'){result.product={...updated,lastPurchasePrice:updated.purchaseSourceId?updated.lastPurchasePrice:updated.purchasePrice??0};const audit=db.prepare('SELECT id,kind,record_id AS recordId,action,actor,at,reason,before_data,after_data FROM record_audit WHERE kind=? AND record_id=? ORDER BY id DESC LIMIT 1').get(kind,old.id);if(audit){result.recordAudit={...audit,before:JSON.parse(audit.before_data),after:JSON.parse(audit.after_data)};delete result.recordAudit.before_data;delete result.recordAudit.after_data;}}return res.end(JSON.stringify(result));
  }
- if(kind==='products'){db.exec('BEGIN');try{if(productImage){body.imageId=Number(db.prepare('INSERT INTO product_images(name,mime,content) VALUES(?,?,?)').run(productImage.name,productImage.mime,productImage.bytes).lastInsertRowid);body.imageName=productImage.name;}const id=save(kind,{...body,active:true,createdAt:new Date().toISOString(),createdBy:currentUser.name});db.exec('COMMIT');return res.end(JSON.stringify({id}));}catch(e){db.exec('ROLLBACK');throw e;}}
+ if(kind==='products'){db.exec('BEGIN');try{if(productImage){body.imageId=Number(db.prepare('INSERT INTO product_images(name,mime,content) VALUES(?,?,?)').run(productImage.name,productImage.mime,productImage.bytes).lastInsertRowid);body.imageName=productImage.name;}const product={...body,active:true,createdAt:new Date().toISOString(),createdBy:currentUser.name};const id=save(kind,product);db.exec('COMMIT');return res.end(JSON.stringify({id,product:stockBreakdown({...product,id},[],[])}));}catch(e){db.exec('ROLLBACK');throw e;}}
  return res.end(JSON.stringify({id:save(kind,{...body,active:true})}));
  }
  const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','login-history.js','sales-history.js','whatsapp.js','invoice-share.js','supplier-stock.js','product-autocomplete.js','product-pickers.js','product-type.js','product-image-controls.js','purchase-reference.js','product-quantity.js','purchase-drafts.js','product-audit.js','form-submission.js','barcode-scanner.js','zxing-browser.min.js','zxing-browser.LICENSE','google-complete.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js','jumia-delegate.js','delegate-purchases.js','jumia-delivery-requests.js','delivery-pricing.js','jumia-temporary-math.js','jumia-temporary.js'].includes(file)){res.writeHead(404);return res.end();}

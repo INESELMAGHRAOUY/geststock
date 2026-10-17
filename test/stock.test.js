@@ -9,3 +9,13 @@ test('Jumia purchase cost follows latest received purchase with discount, ignori
  const receipts=[{id:2,date:'2026-10-01',status:'received',lines:[{productId:1,qty:2,unitPrice:100,discount:10}]},{id:3,date:'2026-10-03',status:'pending',lines:[{productId:1,qty:1,unitPrice:999}]},{id:4,date:'2026-10-02',status:'received',active:false,lines:[{productId:1,qty:1,unitPrice:999}]}];
  assert.equal(latestPurchaseCost(p,receipts).lastPurchasePrice,90);assert.equal(latestPurchaseCost(p,receipts).purchaseSourceId,2);assert.equal(latestPurchaseCost(p,[]).lastPurchasePrice,5);
 });
+test('indexed catalogue stocks match individual calculations including multi-product and inactive operations',()=>{
+ const {catalogueStock}=require('../stock');
+ const products=[{id:1,initialStock:10,purchasePrice:5},{id:2,stock:20,purchasePrice:7},{id:3,initialStock:0}];
+ const movements=[{id:1,date:'2026-01-01',lines:[{productId:1,qty:4,unitPrice:10},{productId:2,qty:3,unitPrice:20},{productId:1,qty:2,unitPrice:12}]},{id:2,active:false,productId:1,qty:40},{id:3,status:'pending',productId:2,qty:50}];
+ const documents=[{type:'Facture',lines:[{productId:1,qty:2},{productId:2,qty:1}]},{type:'Devis',lines:[{productId:1,qty:50}]}];
+ const inventories=[{productId:1,delta:-1},{productId:2,delta:3,active:false}];
+ const orders=[{active:true,status:'Livré',lines:[{productId:1,qty:2,fromStock:true,dispatched:true},{productId:2,qty:1,fromStock:true,dispatched:true}]}];
+ const delegates=[{source:'company',status:'received',lines:[{productId:2,qty:3},{productId:1,qty:1}]},{source:'company',status:'pending',lines:[{productId:1,qty:50}]}];
+ assert.deepEqual(catalogueStock(products,movements,documents,inventories,orders,delegates),products.map(p=>stockBreakdown(p,movements,documents,inventories,orders,delegates)));
+});

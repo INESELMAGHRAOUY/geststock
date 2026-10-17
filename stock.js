@@ -13,10 +13,19 @@ function stockBreakdown(product,movements,documents,inventories=[],jumiaOrders=[
  const initialStock=product.initialStock??product.stock-purchased+sold+jumiaSold+delegateSupplied-adjustment;
  return {...product,...latestPurchaseCost(product,movements),initialStock,purchased,sold,jumiaSold,delegateSupplied,adjustment,stock:initialStock+purchased-sold-jumiaSold-delegateSupplied+adjustment};
 }
+// Index operations once for the catalogue instead of scanning every operation per article.
+function catalogueStock(products,movements,documents,inventories=[],jumiaOrders=[],delegatePurchases=[]){
+ const index=(rows,ids)=>{const map=new Map();for(const row of rows)for(const id of new Set(ids(row))){if(!map.has(id))map.set(id,[]);map.get(id).push(row);}return map;};
+ const lineIds=row=>(row.lines||[row]).map(line=>line.productId);
+ const receipts=index(movements,lineIds),sales=index(documents,lineIds),counts=index(inventories,row=>[row.productId]),delegates=index(delegatePurchases,lineIds);
+ const {jumiaStockLines}=require('./public/jumia-math');
+ const orders=index(jumiaOrders,row=>jumiaStockLines(row).map(([id])=>id));
+ return products.map(p=>stockBreakdown(p,receipts.get(p.id)||[],sales.get(p.id)||[],counts.get(p.id)||[],orders.get(p.id)||[],delegates.get(p.id)||[]));
+}
 function initializeStock(db){
  const rows=kind=>db.prepare('SELECT id,data FROM records WHERE kind=?').all(kind).map(r=>({...JSON.parse(r.data),id:r.id}));
  const movements=rows('movements'),documents=rows('documents'),inventories=rows('inventories'),jumiaOrders=rows('jumiaOrders');db.exec('BEGIN IMMEDIATE');try{
  for(const p of rows('products'))if(p.initialStock===undefined){const {initialStock}=stockBreakdown(p,movements,documents,inventories,jumiaOrders,rows('delegatePurchases'));db.prepare('UPDATE records SET data=? WHERE id=?').run(JSON.stringify({...p,initialStock}),p.id);}
  db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}
 }
-module.exports={stockBreakdown,initializeStock,latestPurchaseCost};
+module.exports={stockBreakdown,catalogueStock,initializeStock,latestPurchaseCost};
