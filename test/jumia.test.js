@@ -68,3 +68,9 @@ test('customer return and failed delivery lists count orders once even with mult
 });
 
 test('customers with pending orders come first and pending counts orders once, excluding inactive orders',()=>{const {jumiaCustomers}=require('../public/jumia-math');const order=(id,customer,date,statuses,active=true)=>({id,customer,address:'Address',date,active,lines:statuses.map(status=>({status,qty:2,salePrice:100}))});const r=jumiaCustomers([order(1,'Recent delivered','2026-10-11',['Livré']),order(2,'Older pending','2026-09-01',['En attente','En attente','Livré']),order(3,'New pending','2026-10-10',['En attente']),order(4,'Inactive pending','2026-10-11',['En attente'],false),order(5,'Older pending','2026-09-02',['En attente'])]);assert.deepEqual(r.map(c=>c.name),['New pending','Older pending','Recent delivered']);assert.equal(r[1].pendingOrders,2);assert.equal(r[1].deliveredOrders,1);assert.equal(r[1].amount,20000);assert.equal(r[2].pendingOrders,0);});
+test('customer cancellations count each active order once, including mixed statuses',()=>{
+ const {jumiaCustomers}=require('../public/jumia-math');
+ const order=(id,statuses,active=true)=>({id,customer:'Client',address:'Address',date:'2026-10-17',active,lines:statuses.map(status=>({status,qty:1,salePrice:100}))});
+ const [client]=jumiaCustomers([order(1,['Annulé','Annulé']),order(2,['Annulé','Livré']),order(3,['Annulé'],false),order(4,['En attente'])]);
+ assert.equal(client.cancelledOrders,2);assert.equal(client.orders.length,3);assert.equal(client.deliveredOrders,1);assert.equal(client.amount,10000);
+});
