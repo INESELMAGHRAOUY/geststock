@@ -2,7 +2,7 @@ let adminRecordEdit=null;
 function adminRecordActions(kind,id,edit=true){
  if(state.currentUser?.role!=='admin')return '';
  const record=state[kind].find(x=>x.id===id);if(!record)return '';
- return `<span class="badge">${record.active===false?'Non actif':'Actif'}</span>${edit?`<button type="button" class="secondary" data-admin-edit="${kind}/${id}">Modifier</button>`:''}<button type="button" class="${record.active===false?'secondary':'danger'}" data-admin-state="${kind}/${id}">${record.active===false?'Réactiver':'Supprimer'}</button>`;
+ return `${record.active===false?'<span class="badge">Non actif</span>':''}${edit?`<button type="button" class="secondary" data-admin-edit="${kind}/${id}">Modifier</button>`:''}<button type="button" class="${record.active===false?'secondary':'danger'}" data-admin-state="${kind}/${id}">${record.active===false?'Réactiver':'Supprimer'}</button>`;
 }
 function adminSelect(name,label,kind,value){return `<label>${label}<select name="${name}"><option value="">Facultatif</option>${state[kind].filter(x=>x.active!==false||x.id===value).map(x=>`<option value="${x.id}" ${x.id===value?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>`;}
 function adminEditorFields(kind,r){
