@@ -74,3 +74,10 @@ test('customer cancellations count each active order once, including mixed statu
  const [client]=jumiaCustomers([order(1,['Annulé','Annulé']),order(2,['Annulé','Livré']),order(3,['Annulé'],false),order(4,['En attente'])]);
  assert.equal(client.cancelledOrders,2);assert.equal(client.orders.length,3);assert.equal(client.deliveredOrders,1);assert.equal(client.amount,10000);
 });
+test('hub performance counts actual deposits once per order and groups unidentified hubs separately',()=>{
+ const {jumiaHubStats}=require('../public/jumia-math');
+ const order=(hubId,statuses,dispatched=false)=>({hubId,lines:statuses.map(status=>({status,dispatched}))});
+ const rows=jumiaHubStats([order(1,['Livré','Livré']),order(1,['Annulé']),order(1,['Annulé'],true),order(2,['Expédié']),order(2,['En attente']),order(null,['Retourné'])],[{id:1,name:'Hub A',city:'Rabat'},{id:2,name:'Hub B',city:'Casa'}]);
+ assert.equal(rows[0].name,'Hub A');assert.equal(rows[0].orders,3);assert.equal(rows[0].deposited,2);assert.equal(rows[0].delivered,1);assert.equal(rows[0].cancelled,2);assert.equal(rows[0].deliveryRate,50);assert.equal(rows[0].share,50);assert.equal(rows.find(h=>!h.identified).deposited,1);assert.equal(rows.find(h=>h.name==='Hub B').inTransit,1);
+ assert.deepEqual(jumiaHubStats([]),[]);
+});
