@@ -1,0 +1,7 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const {jumiaOrderTotals,jumiaSummary}=require('../public/jumia-math');
+const line={status:'Annulé',dispatched:false,qty:1,salePrice:100,purchasePrice:40,commissionPercent:15,commissionActual:15,shippingContribution:6,otherFees:3,refundCredit:2,lost:true};
+const costs={supplierTransport:5,hubTransport:10,ticketQty:1,ticketUnitPrice:2,saltKg:1,saltUnitPrice:2,cartonQty:1,cartonUnitPrice:6,other:0};
+test('cancelled before dispatch has zero fees, cost and profit even with stored default charges',()=>{const order={lines:[line],costs};const totals=jumiaOrderTotals(order);for(const [key,value] of Object.entries(totals))assert.equal(value,0,key);const summary=jumiaSummary(Array.from({length:13},()=>order));assert.equal(summary.count,13);assert.equal(summary.logistics,0);assert.equal(summary.profit,0);assert.equal(order.costs.hubTransport,10);});
+test('cancelled lines do not charge fees in mixed orders, shared logistics remain for delivered items',()=>{const delivered={...line,status:'Livré',dispatched:true,lost:false};assert.deepEqual(jumiaOrderTotals({lines:[delivered,line],costs}),jumiaOrderTotals({lines:[delivered],costs}));});
+test('already dispatched cancellation retains incurred logistics',()=>{const totals=jumiaOrderTotals({lines:[{...line,dispatched:true,lost:false}],costs});assert.equal(totals.logistics,2500);});
