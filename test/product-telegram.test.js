@@ -1,0 +1,4 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const {telegramProductUrl}=require('../public/product-type');
+test('Telegram product links retain exact message paths and optional query parameters',()=>{assert.equal(telegramProductUrl(' https://t.me/c/123456/789?single '),'https://t.me/c/123456/789?single');assert.equal(telegramProductUrl('https://telegram.me/catalog/123'),'https://telegram.me/catalog/123');assert.equal(telegramProductUrl(''),'');assert.equal(telegramProductUrl('  '),'');});
+test('Telegram product links reject scripts, external hosts and embedded credentials',()=>{for(const value of ['javascript:alert(1)','https://t.me.evil.com/123','http://t.me/123','https://example.com','https://user:pass@t.me/123',{},'https://t.me:444/a'])assert.throws(()=>telegramProductUrl(value),/Telegram/);});

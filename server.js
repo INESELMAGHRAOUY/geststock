@@ -2,7 +2,7 @@ const {readProductAudit}=require('./product-audit');
 const {productQuantityMode,validateProductQuantity}=require('./public/product-quantity');
 const {assertUniquePurchaseReference}=require('./public/purchase-reference');
 const {handleReportUpdate}=require('./jumia-report-update');
-const {productType}=require('./public/product-type');
+const {productType,telegramProductUrl}=require('./public/product-type');
 const {supplierUrl,createSupplierStock}=require('./supplier-stock');
 const {invoicePdf}=require('./invoice-pdf');
 const {readSalesHistory}=require('./sales-history');
@@ -377,6 +377,7 @@ const server=http.createServer(async(req,res)=>{
  removeProductImage=body.removeImage===true;delete body.removeImage;if(removeProductImage&&body.image)throw Error('Choisissez retirer ou remplacer l’image');
  if(body.productType!==undefined&&!['PARA','ECOM','PROF'].includes(body.productType))throw Error('Type de produit invalide');
  body.productType=body.productType||productType({...list('products').find(p=>p.id===body.id),...body});
+ if(body.telegramUrl!==undefined)body.telegramUrl=telegramProductUrl(body.telegramUrl);
  if(body.supplierUrl!==undefined)body.supplierUrl=supplierUrl(body.supplierUrl);
  if(body.parabudgetUrl!==undefined)body.parabudgetUrl=supplierUrl(body.parabudgetUrl,'parabudget');
  if(body.imageUrl){let url;try{url=new URL(body.imageUrl);}catch{throw Error('URL image invalide');}if(url.protocol!=='https:'||url.hostname!=='vendorcenter.jumia.com')throw Error('URL image Jumia invalide');}
