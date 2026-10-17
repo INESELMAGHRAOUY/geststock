@@ -1,3 +1,4 @@
+const {handleReportUpdate}=require('./jumia-report-update');
 const {productType}=require('./public/product-type');
 const {supplierUrl,createSupplierStock}=require('./supplier-stock');
 const {invoicePdf}=require('./invoice-pdf');
@@ -258,6 +259,7 @@ const server=http.createServer(async(req,res)=>{
  if(kind==='jumiaPayouts'){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleJumiaPayout({db,body,user:currentUser,list,save})));}
  if(kind==='jumiaCatalogImports'){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleCatalog({db,body,user:currentUser,list,save})));}
  if(!kinds.includes(kind)&&kind!=='adminRecords')throw Error('Module inconnu');
+ if(kind==='jumiaReports'&&['previewUpdate','commitUpdate'].includes(body.action))return res.end(JSON.stringify(handleReportUpdate({db,body,user:currentUser,list,save})));
  if(['jumiaStores','jumiaOrders','jumiaHubs','jumiaReports','jumiaCategories'].includes(kind)){if(req.method!=='POST')throw Error('Méthode invalide');return res.end(JSON.stringify(handleJumia({db,body,user:currentUser,list,save,kind})));}
  if(kind==='accountOpenings'){
  if(req.method!=='POST'||currentUser.role!=='admin')throw Error('Gestion de trésorerie réservée aux administrateurs');

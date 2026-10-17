@@ -32,6 +32,7 @@ function handleJumia({db,body,user,list,save,kind,outerTransaction=false,allowSt
  if(!Array.isArray(body.results)||body.results.length!==shipped.length||new Set(body.results.map(r=>r.lineId)).size!==shipped.length||body.results.some(r=>!shipped.some(l=>l.lineId===r.lineId)||!['Livré','La livraison a échoué'].includes(r.status)))throw Error('Choisissez le résultat de chaque article expédié');
  updated={...old,lines:old.lines.map(l=>l.status==='Expédié'?{...l,status:body.results.find(r=>r.lineId===l.lineId).status,returnedToStock:body.results.find(r=>r.lineId===l.lineId).status==='La livraison a échoué'&&!l.lost}:l)};
  }else if(body.action==='setActive'){
+ if(kind==='jumiaReports'&&body.active&&old?.replacedByReportId)throw Error('Cet import a été remplacé : utilisez le relevé actualisé');
  if(!old||typeof body.active!=='boolean'||body.active===(old.active!==false))throw Error('État invalide');if(kind==='jumiaHubs'&&body.active&&providerCode(old.shippingProviderCode)&&list(kind).some(h=>h.id!==old.id&&h.active!==false&&providerCode(h.shippingProviderCode)===providerCode(old.shippingProviderCode)))throw Error('Ce Shipping Provider est déjà associé à un hub actif');updated={...old,active:body.active};
  }else if(kind==='jumiaReports'){
  if(old)throw Error('Un import ne peut pas être modifié');const store=list('jumiaStores').find(s=>s.id===body.storeId&&s.active!==false);if(!store)throw Error('Choisissez une boutique active');

@@ -41,6 +41,7 @@ function handleWorkspace({db,body:request,user,list,save,kinds}){
  if(body.id===undefined)checkStore(body.storeId);
  if(body.lines)for(const l of body.lines){if(!scoped('jumiaStores').find(s=>s.id===body.storeId)?.listings.some(r=>r.id===l.listingId))throw Error('Listing non autorisé');if(l.status==='Retourné'&&!l.returnedToStock&&!l.lost)throw Error('Confirmez si le produit retourné est utilisable (retour stock) ou perdu / endommagé');}
  }
+ if(kind==='jumiaReports'&&['previewUpdate','commitUpdate'].includes(body.action))return require('./jumia-report-update').handleReportUpdate({db,body,user:admin,list:scoped,save:scopedSave});
  return handleJumia({db,body,user:admin,list:scoped,save:scopedSave,kind});
 }
 function delegateBrands(db,body,user,save,list){const owned=new Set(list('delegateBrandOwnership').filter(r=>r.ownerId===user.id).map(r=>r.brandId));if(body.id&&!owned.has(body.id))throw Error('Brand partagé : vous pouvez créer vos propres brands');if(body.action!=='import'){if(body.id){const expected=JSON.parse(body.expectedRecord||'{}');delete expected.delegateEditable;body.expectedRecord=JSON.stringify(expected);}const result=handleBrands(db,body,user);if(!body.id)save('delegateBrandOwnership',{ownerId:user.id,brandId:result.id});return result;}
