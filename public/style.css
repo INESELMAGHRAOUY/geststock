@@ -75,3 +75,5 @@ button.compact-action-edit{color:#ba5908;background:#fff1df;border-color:#f4d5ad
 button.compact-action-statement{color:#236a9b;background:#eaf3fb;border-color:#c9dfee}button.compact-action-statement:hover{background:#d5e9f8;border-color:#91bedc}
 
 .contact-list-filters{padding:16px;margin:20px 0;border:1px solid #d5e0e9;border-radius:10px;background:#f6f9fb}.contact-list-filters>small{align-self:center;color:#607484}
+
+.contact-list-filters{justify-content:flex-end}.contact-list-filters>label{flex:0 1 220px}.contact-list-filters>small{flex:0 0 auto}@media(max-width:640px){.contact-list-filters>label{flex:1 1 100%}}
