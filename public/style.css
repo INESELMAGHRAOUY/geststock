@@ -71,3 +71,5 @@ button.compact-action-edit{color:#ba5908;background:#fff1df;border-color:#f4d5ad
 
 /* Clear cell boundaries in application tables and dialogs. */
 #content table,dialog table{border:1px solid #bccbd7;border-collapse:collapse}#content table th,#content table td,dialog table th,dialog table td{border:1px solid #c8d4df}#content table th,dialog table th{background:#f3f6f9;border-bottom:2px solid #b5c6d4}
+
+button.compact-action-statement{color:#236a9b;background:#eaf3fb;border-color:#c9dfee}button.compact-action-statement:hover{background:#d5e9f8;border-color:#91bedc}
