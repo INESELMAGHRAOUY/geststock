@@ -387,6 +387,7 @@ const server=http.createServer(async(req,res)=>{
  if(body.imageUrl){let url;try{url=new URL(body.imageUrl);}catch{throw Error('URL image invalide');}if(url.protocol!=='https:'||url.hostname!=='vendorcenter.jumia.com')throw Error('URL image Jumia invalide');}
  delete body.imageId;delete body.imageName;
  if(body.image)productImage=readProductImage(body.image);delete body.image;
+ if(body.id===undefined&&(body.color||body.size)&&!productImage)throw Error('Ajoutez une image propre à cette variante avant de l’enregistrer');
 
  for(const key of ['barcode','sku'])if(body[key]!==undefined&&(typeof body[key]!=='string'||body[key].length>150))throw Error('Code-barres ou SKU vendeur invalide');
  if(body.jumiaCommissionPercent!==undefined&&(!Number.isFinite(body.jumiaCommissionPercent)||body.jumiaCommissionPercent<0||body.jumiaCommissionPercent>100))throw Error('Commission Jumia invalide');

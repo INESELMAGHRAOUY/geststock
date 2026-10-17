@@ -13,7 +13,7 @@ function normalizeProductVariant(body,products=[]){
  result.modelName=(existing?.modelName&&submitted===existing.name?existing.modelName:submitted).trim();
  result.name=[result.modelName,result.color,result.size].filter(Boolean).join(' / ');
  const normalize=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
- if((result.color||result.size)&&products.some(p=>p.id!==body.id&&p.active!==false&&normalize(p.modelName||p.name)===normalize(result.modelName)&&normalize(p.color)===normalize(result.color)&&normalize(p.size)===normalize(result.size)))throw Error('Cette variante couleur / taille existe déjà pour ce modèle');
+ if(products.some(p=>p.id!==body.id&&p.active!==false&&(normalize(p.name)===normalize(result.name)||(normalize(p.modelName||p.name)===normalize(result.modelName)&&normalize(p.color)===normalize(result.color)&&normalize(p.size)===normalize(result.size)))))throw Error(result.color||result.size?'Cette variante couleur / taille existe déjà pour ce modèle':'Un produit avec ce titre existe déjà. Ouvrez sa fiche pour le modifier ou utilisez + Variante.');
  return result;
 }
 module.exports={normalizeProductVariant};

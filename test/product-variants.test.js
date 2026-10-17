@@ -24,3 +24,10 @@ test('purchases and invoices affect only the selected color / size',()=>{
  assert.equal(stockBreakdown(a,purchases,invoices).stock,8);
  assert.equal(stockBreakdown(b,purchases,invoices).stock,5);
 });
+test('simple duplicate titles and legacy full-title collisions are blocked while editing oneself is allowed',()=>{
+ const p={id:1,name:'Crème hydratante',active:true};
+ assert.throws(()=>normalizeProductVariant({name:' creme   HYDRATANTE '},[p]),/titre existe déjà/);
+ assert.doesNotThrow(()=>normalizeProductVariant({id:1,name:p.name},[p]));
+ assert.throws(()=>normalizeProductVariant({name:'Body',color:'Noir',size:'M'},[{id:2,name:'Body / Noir / M'}]),/existe déjà/);
+ assert.doesNotThrow(()=>normalizeProductVariant({name:'Body',color:'Rouge',size:'M'},[{id:2,name:'Body / Noir / M'}]));
+});
