@@ -1,3 +1,4 @@
+const {normalizeProductVariant}=require('./product-variants');
 const {readProductAudit}=require('./product-audit');
 const {productQuantityMode,validateProductQuantity}=require('./public/product-quantity');
 const {assertUniquePurchaseReference}=require('./public/purchase-reference');
@@ -370,6 +371,7 @@ const server=http.createServer(async(req,res)=>{
  if(req.method==='DELETE')throw Error('Utilisez Désactiver : aucun élément ne doit être supprimé');
  if(req.method!=='POST')throw Error('Méthode non autorisée');
  if(kind==='products'){
+ Object.assign(body,normalizeProductVariant(body,list('products')));
  if(body.quantityMode!==undefined&&!['unit','decimal'].includes(body.quantityMode))throw Error('Mode de quantité invalide');
  body.quantityMode=body.quantityMode||productQuantityMode({...list('products').find(p=>p.id===body.id),...body});
  validateProductQuantity(body,body.stock);validateProductQuantity(body,body.min);
