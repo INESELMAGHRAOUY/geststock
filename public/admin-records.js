@@ -2,7 +2,7 @@ let adminRecordEdit=null;
 function adminRecordActions(kind,id,edit=true){
  if(state.currentUser?.role!=='admin')return '';
  const record=state[kind].find(x=>x.id===id);if(!record)return '';
- return `<span class="badge">${record.active===false?'Non actif':'Actif'}</span>${edit?`<button type="button" class="secondary" data-admin-edit="${kind}/${id}">Modifier</button>`:''}<button type="button" class="${record.active===false?'secondary':'danger'}" data-admin-state="${kind}/${id}">${record.active===false?'Réactiver':'Désactiver'}</button>`;
+ return `<span class="badge">${record.active===false?'Non actif':'Actif'}</span>${edit?`<button type="button" class="secondary" data-admin-edit="${kind}/${id}">Modifier</button>`:''}<button type="button" class="${record.active===false?'secondary':'danger'}" data-admin-state="${kind}/${id}">${record.active===false?'Réactiver':'Supprimer'}</button>`;
 }
 function adminSelect(name,label,kind,value){return `<label>${label}<select name="${name}"><option value="">Facultatif</option>${state[kind].filter(x=>x.active!==false||x.id===value).map(x=>`<option value="${x.id}" ${x.id===value?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label>`;}
 function adminEditorFields(kind,r){
@@ -19,7 +19,7 @@ function showAdminRecordEditor(kind,id,action){
  const record=state[kind].find(x=>x.id===id);if(!record)return;
  adminRecordEdit={kind,record,action,data:structuredClone(record)};if(kind==='movements')adminRecordEdit.data.lines=(record.lines||[record]).map(l=>({...l,price:l.unitPrice||0}));
  const dialog=document.querySelector('#admin-record-dialog');
- dialog.innerHTML=`<h2>${action==='modify'?'Modifier':record.active===false?'Réactiver':'Désactiver'} — ${esc(record.label||record.name||record.number||record.beneficiary||record.reference||'#'+record.id)}</h2><form id="admin-record-form">${action==='modify'?adminEditorFields(kind,record):''}${field('reason','Motif obligatoire')}<button>Enregistrer</button><button type="button" id="admin-record-cancel" class="secondary">Annuler</button></form><p>Les données et leur historique sont conservés. La correction d’une charge ne modifie pas automatiquement les chèques déjà émis.</p>`;dialog.showModal();
+ dialog.innerHTML=`<h2>${action==='modify'?'Modifier':record.active===false?'Réactiver':'Supprimer'} — ${esc(record.label||record.name||record.number||record.beneficiary||record.reference||'#'+record.id)}</h2><form id="admin-record-form">${action==='modify'?adminEditorFields(kind,record):''}${field('reason','Motif obligatoire')}<button>Enregistrer</button><button type="button" id="admin-record-cancel" class="secondary">Annuler</button></form><p>Les données et leur historique sont conservés. La correction d’une charge ne modifie pas automatiquement les chèques déjà émis.</p>`;dialog.showModal();
 }
 document.addEventListener('click',e=>{
  const b=e.target.closest('button');if(!b)return;
