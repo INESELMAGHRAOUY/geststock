@@ -121,5 +121,7 @@ test('devis, facture, stock insuffisant, réception et persistance',async()=>{
  const purchase={supplierId:supplierA,reference:'BON-123',status:'pending',lines:[{productId:p,qty:1,unitPrice:20}]};assert.equal((await request('movements',purchase)).status,200);const beforeDuplicate=(await request('state')).data;
  const duplicate=await request('movements',{...purchase,status:'received',reference:' bon-123 '});assert.equal(duplicate.status,400);assert.match(duplicate.data.error,/déjà enregistré/);const afterDuplicate=(await request('state')).data;assert.equal(afterDuplicate.movements.length,beforeDuplicate.movements.length);assert.equal(afterDuplicate.products.find(x=>x.id===p).stock,beforeDuplicate.products.find(x=>x.id===p).stock);
  assert.equal((await request('movements',{...purchase,supplierId:supplierB})).status,200);
+ const fractionalPurchase={...purchase,reference:'FRACTION',lines:[{productId:p,qty:0.5,unitPrice:20}]};assert.equal((await request('movements',fractionalPurchase)).status,400);assert.equal((await request('documents',{type:'Facture',tax:20,lines:[{productId:p,qty:0.5}]})).status,400);
+ const unitProduct=(await request('state')).data.products.find(x=>x.id===p);assert.equal((await request('products',{...unitProduct,quantityMode:'decimal',expectedStock:unitProduct.stock})).status,200);assert.equal((await request('movements',fractionalPurchase)).status,200);
  }finally{if(child&&!child.killed)await new Promise(resolve=>{child.once('exit',resolve);child.kill();});fs.rmSync(dir,{recursive:true,force:true});}
 });

@@ -1,3 +1,4 @@
+const {validateProductQuantity}=require('./public/product-quantity');
 const {assertUniquePurchaseReference}=require('./public/purchase-reference');
 const validDate=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&!Number.isNaN(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
 function setupRecordAudit(db){db.exec('CREATE TABLE IF NOT EXISTS record_audit(id INTEGER PRIMARY KEY,kind TEXT NOT NULL,record_id INTEGER NOT NULL,action TEXT NOT NULL,actor TEXT NOT NULL,at TEXT NOT NULL,reason TEXT NOT NULL,before_data TEXT NOT NULL,after_data TEXT NOT NULL)');}
@@ -22,7 +23,7 @@ function handleRecordAdmin({db,body,user,list,save}){
  Object.assign(updated,{label:data.label.trim(),category:data.category.trim(),date:data.date,amount:data.amount,amountCents:Math.round(data.amount*100),supplierId:supplier?.id||null,supplierName:supplier?.name||'',reference:String(data.reference||''),notes:String(data.notes||'')});
  }else if(kind==='documents'){
  if(!Array.isArray(data.lines)||!data.lines.length||!Number.isFinite(data.tax)||data.tax<0||data.tax>100)throw Error('Document invalide');
- const lines=data.lines.map(l=>{const product=list('products').find(p=>p.id===l.productId);if(!product||!Number.isFinite(l.qty)||l.qty<=0||!Number.isFinite(l.price)||l.price<0)throw Error('Ligne invalide');return {productId:product.id,name:product.name,qty:l.qty,price:l.price};});
+ const lines=data.lines.map(l=>{const product=list('products').find(p=>p.id===l.productId);if(!product||!Number.isFinite(l.qty)||l.qty<=0||!Number.isFinite(l.price)||l.price<0)throw Error('Ligne invalide');validateProductQuantity(product,l.qty);return {productId:product.id,name:product.name,qty:l.qty,price:l.price};});
  const client=data.clientId?list('clients').find(c=>c.id===data.clientId):null;if(data.clientId&&!client)throw Error('Client introuvable');
  Object.assign(updated,{lines,tax:data.tax,clientId:client?.id||null,clientName:client?.name||'Client comptoir',total:lines.reduce((s,l)=>s+l.qty*l.price,0)*(1+data.tax/100)});
  }else if(kind==='movements'){
@@ -30,7 +31,7 @@ function handleRecordAdmin({db,body,user,list,save}){
  const supplier=data.supplierId?list('suppliers').find(x=>x.id===data.supplierId):null;if(data.supplierId&&!supplier)throw Error('Fournisseur introuvable');
  Object.assign(updated,{lines,total:lines.reduce((sum,l)=>sum+l.total,0),name:lines.map(l=>l.name).join(', '),supplierId:supplier?.id||null,reference:String(data.reference||''),supplierName:supplier?.name||''});
  }else if(kind==='inventories'){
- const product=list('products').find(p=>p.id===old.productId);if(!product||!Number.isFinite(data.counted)||data.counted<0)throw Error('Quantité comptée invalide');
+ const product=list('products').find(p=>p.id===old.productId);if(!product||!Number.isFinite(data.counted)||data.counted<0)throw Error('Quantité comptée invalide');validateProductQuantity(product,data.counted);
  const delta=data.counted-old.previousStock;Object.assign(updated,{counted:data.counted,delta});
  }else if(kind==='cheques'){
  if(typeof data.beneficiary!=='string'||!data.beneficiary.trim()||!Number.isFinite(data.amount)||data.amount<=0||!validDate(data.date))throw Error('Chèque invalide');

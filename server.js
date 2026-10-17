@@ -1,3 +1,4 @@
+const {productQuantityMode,validateProductQuantity}=require('./public/product-quantity');
 const {assertUniquePurchaseReference}=require('./public/purchase-reference');
 const {handleReportUpdate}=require('./jumia-report-update');
 const {productType}=require('./public/product-type');
@@ -367,6 +368,9 @@ const server=http.createServer(async(req,res)=>{
  if(req.method==='DELETE')throw Error('Utilisez Désactiver : aucun élément ne doit être supprimé');
  if(req.method!=='POST')throw Error('Méthode non autorisée');
  if(kind==='products'){
+ if(body.quantityMode!==undefined&&!['unit','decimal'].includes(body.quantityMode))throw Error('Mode de quantité invalide');
+ body.quantityMode=body.quantityMode||productQuantityMode({...list('products').find(p=>p.id===body.id),...body});
+ validateProductQuantity(body,body.stock);validateProductQuantity(body,body.min);
  if(body.removeImage!==undefined&&typeof body.removeImage!=='boolean')throw Error('Choix image invalide');
  removeProductImage=body.removeImage===true;delete body.removeImage;if(removeProductImage&&body.image)throw Error('Choisissez retirer ou remplacer l’image');
  if(body.productType!==undefined&&!['PARA','ECOM','PROF'].includes(body.productType))throw Error('Type de produit invalide');
@@ -400,7 +404,7 @@ const server=http.createServer(async(req,res)=>{
  if(body.id!==undefined)throw Error('Utilisez le formulaire de modification administrateur');
  if(!['Facture','Devis'].includes(body.type)||!body.lines?.length)throw Error('Document invalide');
  db.exec('BEGIN IMMEDIATE');try{
- body.active=true;const quantities=new Map();body.lines=body.lines.map(l=>{const p=list('products').find(p=>p.id===l.productId);if(!p||p.active===false||!Number.isFinite(l.qty)||l.qty<=0)throw Error('Quantité invalide');quantities.set(p.id,(quantities.get(p.id)||0)+l.qty);return {productId:p.id,name:p.name,qty:l.qty,price:p.price};});
+ body.active=true;const quantities=new Map();body.lines=body.lines.map(l=>{const p=list('products').find(p=>p.id===l.productId);if(!p||p.active===false||!Number.isFinite(l.qty)||l.qty<=0)throw Error('Quantité invalide');validateProductQuantity(p,l.qty);quantities.set(p.id,(quantities.get(p.id)||0)+l.qty);return {productId:p.id,name:p.name,qty:l.qty,price:p.price};});
  if(!Number.isFinite(body.tax)||body.tax<0||body.tax>100)throw Error('TVA invalide');
  if(body.type==='Facture')for(const [id,qty] of quantities){const p=list('products').find(p=>p.id===id);if(p.stock<qty)throw Error('Stock insuffisant : '+p.name);save('products',{...p,stock:p.stock-qty},id);}
  body.clientName=list('clients').find(c=>c.id===body.clientId)?.name||'Client comptoir';body.date=new Date().toISOString();body.number=(body.type==='Facture'?'FAC':'DEV')+'-'+String(list('documents').length+1).padStart(5,'0');body.total=body.lines.reduce((s,l)=>s+l.qty*l.price,0)*(1+body.tax/100);const id=save(kind,body);db.exec('COMMIT');return res.end(JSON.stringify({id}));
@@ -410,6 +414,7 @@ const server=http.createServer(async(req,res)=>{
  if(body.id!==undefined)throw Error('Utilisez Modifier');
  const product=list('products').find(p=>p.id===body.productId&&p.active!==false);
  if(!product||!Number.isFinite(body.counted)||body.counted<0||typeof body.reason!=='string'||!body.reason.trim())throw Error('Article, quantité comptée et motif obligatoires');
+ validateProductQuantity(product,body.counted);
  if(body.expectedStock!==product.stock)throw Error('Le stock a changé. Rechargez avant de valider l’inventaire');
  const id=save(kind,{productId:product.id,name:product.name,counted:body.counted,previousStock:product.stock,delta:body.counted-product.stock,reason:body.reason.trim(),date:new Date().toISOString(),createdBy:currentUser.name,active:true});return res.end(JSON.stringify({id}));
  }
@@ -441,7 +446,7 @@ const server=http.createServer(async(req,res)=>{
  if(kind==='products'){db.exec('BEGIN');try{if(productImage){body.imageId=Number(db.prepare('INSERT INTO product_images(name,mime,content) VALUES(?,?,?)').run(productImage.name,productImage.mime,productImage.bytes).lastInsertRowid);body.imageName=productImage.name;}const id=save(kind,{...body,active:true});db.exec('COMMIT');return res.end(JSON.stringify({id}));}catch(e){db.exec('ROLLBACK');throw e;}}
  return res.end(JSON.stringify({id:save(kind,{...body,active:true})}));
  }
- const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','login-history.js','sales-history.js','whatsapp.js','invoice-share.js','supplier-stock.js','product-autocomplete.js','product-pickers.js','product-type.js','product-image-controls.js','purchase-reference.js','google-complete.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js','jumia-delegate.js','delegate-purchases.js','jumia-delivery-requests.js','delivery-pricing.js','jumia-temporary-math.js','jumia-temporary.js'].includes(file)){res.writeHead(404);return res.end();}
+ const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','login-history.js','sales-history.js','whatsapp.js','invoice-share.js','supplier-stock.js','product-autocomplete.js','product-pickers.js','product-type.js','product-image-controls.js','purchase-reference.js','product-quantity.js','google-complete.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js','jumia-delegate.js','delegate-purchases.js','jumia-delivery-requests.js','delivery-pricing.js','jumia-temporary-math.js','jumia-temporary.js'].includes(file)){res.writeHead(404);return res.end();}
  if(file==='index.html')recordVisit({db,req,res,user:currentUser,page:'/',secure:cookieName.startsWith('__Host-')});
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');const content=fs.readFileSync(path.join(__dirname,'public',file));res.end(file.endsWith('.html')?versionHtml(content.toString('utf8'),appRelease):content);
  }catch(e){res.writeHead(e.status||400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}

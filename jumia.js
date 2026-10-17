@@ -1,3 +1,4 @@
+const {validateProductQuantity}=require('./public/product-quantity');
 const {isJumiaProduct}=require('./public/product-type');
 const {providerCode}=require('./jumia-hub-provider');
 const {storeIdentity,validateStoreIdentity,verifyStatementStore}=require('./jumia-store-identity');
@@ -65,7 +66,7 @@ function handleJumia({db,body,user,list,save,kind,outerTransaction=false,allowSt
  if(list(kind).some(o=>o.id!==old?.id&&o.storeId===body.storeId&&o.number===body.number.trim()))throw Error('Ce numéro de commande existe déjà dans cette boutique');
  if(!Array.isArray(body.lines)||!body.lines.length||body.lines.length>200)throw Error('Ajoutez des produits à la commande');
  const seen=new Set();const lines=body.lines.map(l=>{
- const prior=old?.lines.find(p=>p.lineId===l.lineId);const product=l.productId?list('products').find(p=>p.id===l.productId):null;if(product&&!isJumiaProduct(product)&&prior?.productId!==product.id)throw Error('Les produits PROF ne sont pas destinés à Jumia');
+ const prior=old?.lines.find(p=>p.lineId===l.lineId);const product=l.productId?list('products').find(p=>p.id===l.productId):null;if(product&&!isJumiaProduct(product)&&prior?.productId!==product.id)throw Error('Les produits PROF ne sont pas destinés à Jumia');if(product)validateProductQuantity(product,l.qty);
  const listing=l.listingId?store.listings?.find(p=>p.id===l.listingId):null;
  if((!product&&!(!l.productId&&listing&&!listing.productId))||product?.active===false)throw Error('Choisissez un produit stock ou un listing de cette boutique à relier');
  if(l.listingId&&(!listing||(listing.productId||null)!==(product?.id||null)||(listing.active===false&&prior?.listingId!==listing.id)))throw Error('Listing indisponible dans cette boutique');
