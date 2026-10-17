@@ -42,6 +42,7 @@ function renderRecordAudit(){return `<div class="panel" style="overflow:auto"><h
 // Apply the same compact action style to lists and dialogs rendered later.
 function enhanceCompactActions(root=document){
  const icons={
+  Modifier:{label:'Modifier',style:'edit',svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m15 5 4 4M4 20l4-1 12-12a2.8 2.8 0 0 0-4-4L4 15l-1 6Z"/></svg>'},
   Supprimer:{label:'Supprimer',style:'delete',svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>'},
   WhatsApp:{label:'Envoyer sur WhatsApp',style:'whatsapp',svg:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20.5 11.6a8.5 8.5 0 0 1-12.6 7.5L3 20.5l1.4-4.8a8.5 8.5 0 1 1 16.1-4.1Z"/><path d="m8.4 7.5 1.3 2.6-.9 1.1c.8 1.5 2 2.7 3.6 3.4l1.1-1 2.7 1.3c-.3 1.4-1.2 2-2.5 1.7-3.8-.9-6.7-3.8-7.3-6.5-.3-1.3.5-2.3 2-2.6Z"/></svg>'}
  };
