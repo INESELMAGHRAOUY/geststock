@@ -84,7 +84,7 @@ function render(){
  }
  if(['purchaseEntry','purchaseProposals','purchasePending','purchaseHistory','inventories','stockCurrent'].includes(page))html=renderSupplyStock();
  if(['supplierSettlements','clientSettlements'].includes(page))html=renderSettlements();
- if(page==='treasury')html=renderTreasury();
+ if(page==='treasury')html=renderTreasury()+bankImportMarkup();
  if(['jumiaDeliveryRequests','jumiaOrders','jumiaGraphs','jumiaDashboard','jumiaStores','jumiaHubs','jumiaListings','jumiaImports','jumiaCategories','jumiaBrands','jumiaClients','jumiaFuelAnalysis'].includes(page))html=renderJumia();
  if(page==='delegatePurchases')html=renderDelegatePurchaseApprovals();
  if(page==='jumiaDeliveryRequests')html=renderDeliveryRequests();

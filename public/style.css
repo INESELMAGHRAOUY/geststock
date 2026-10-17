@@ -77,3 +77,5 @@ button.compact-action-statement{color:#236a9b;background:#eaf3fb;border-color:#c
 .contact-list-filters{padding:16px;margin:20px 0;border:1px solid #d5e0e9;border-radius:10px;background:#f6f9fb}.contact-list-filters>small{align-self:center;color:#607484}
 
 .contact-list-filters{justify-content:flex-end}.contact-list-filters>label{flex:0 1 220px}.contact-list-filters>small{flex:0 0 auto}@media(max-width:640px){.contact-list-filters>label{flex:1 1 100%}}
+
+.bank-import-table{overflow:auto;max-height:55vh;margin:16px 0}.bank-import-table thead th{position:sticky;top:0;z-index:1}#bank-statement-error,#bank-detail-error{color:#b32626}#bank-statement-preview{margin-top:18px}#bank-statement-preview:empty{display:none}
