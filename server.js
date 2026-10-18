@@ -1,4 +1,3 @@
-const {createPersonalFinance}=require('./personal-finance');
 const {createBankImportService}=require('./bank-import');
 const {normalizeProductVariant}=require('./product-variants');
 const {readProductAudit}=require('./product-audit');
@@ -116,7 +115,7 @@ setInterval(dailyBackup,60*60*1000).unref();
 const rawList = kind => db.prepare('SELECT id,data FROM records WHERE kind=? ORDER BY id DESC').all(kind).map(r=>({ ...JSON.parse(r.data),id:r.id}));
 const list=kind=>{const records=rawList(kind);if(kind!=='products')return records;return catalogueStock(records,rawList('movements'),rawList('documents'),rawList('inventories'),rawList('jumiaOrders'),rawList('delegatePurchases'));};
 const bankImport=createBankImportService({db,list});
-const personalFinance=createPersonalFinance({db,list});
+const personalFinance=bankImport.personalFinance;
 const supplierStock=createSupplierStock({db,list});
 setInterval(()=>supplierStock.daily().catch(()=>{}),60*60*1000).unref();
 setTimeout(()=>supplierStock.daily().catch(()=>{}),3000).unref();

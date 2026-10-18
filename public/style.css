@@ -81,3 +81,5 @@ button.compact-action-statement{color:#236a9b;background:#eaf3fb;border-color:#c
 .bank-import-table{overflow:auto;max-height:55vh;margin:16px 0}.bank-import-table thead th{position:sticky;top:0;z-index:1}#bank-statement-error,#bank-detail-error{color:#b32626}#bank-statement-preview{margin-top:18px}#bank-statement-preview:empty{display:none}
 
 .personal-split-fields{display:flex;gap:16px;flex-wrap:wrap}.personal-split-fields>label{flex:1;min-width:160px}#personal-expense-fields{width:100%;border:1px solid #d5e0e9;border-radius:10px;padding:16px}#personal-expense-fields[hidden],#personal-withdrawal-note[hidden]{display:none}#personal-finance-form-error{color:#b32626}
+
+.bank-nature-fields{min-width:190px;display:grid;gap:7px}.bank-nature-fields select,.bank-nature-fields input{width:100%;min-width:0}.bank-nature-fields label{font-size:12px}.bank-nature-fields [hidden]{display:none!important}

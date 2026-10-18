@@ -28,3 +28,13 @@ test('selected bank lines import incrementally while unselected lines stay out o
  const retry=await service.handle(user,{action:'commit',token:resumed.token,confirmAccount:true,selectedKeys:[debit.key]});assert.equal(retry.addedCount,0);assert.equal(service.detail(user,saved.id).operations.length,2);
  }finally{db.close();}
 });
+test('import nature classifications are saved atomically and debit splits reach Personnel immediately',async()=>{
+ const db=new DatabaseSync(':memory:'),user={id:1,name:'Admin',role:'admin'},state={banks:[{id:1,name:'Bank',active:true}],settlements:[],expensePayments:[],jumiaPayouts:[]},parsed=parseAttijariPages(fixture()),service=createBankImportService({db,list:k=>state[k]||[],parsePdf:async()=>parsed}),credit=parsed.operations[0],debit=parsed.operations[1];
+ try{const p=await service.handle(user,{action:'preview',provider:'auto',bankId:1,base64:Buffer.from('%PDF-nature').toString('base64')});
+ await assert.rejects(()=>service.handle(user,{action:'commit',token:p.token,confirmAccount:true,selectedKeys:[debit.key],classifications:{[debit.key]:{nature:'mixed',personalCents:debit.debitCents+1}}}),/part personnelle/);assert.equal(service.summaries(user).length,0);
+ const result=await service.handle(user,{action:'commit',token:p.token,confirmAccount:true,selectedKeys:[credit.key,debit.key],classifications:{[credit.key]:{nature:'personal'},[debit.key]:{nature:'mixed',personalCents:700,category:'Courses'}}});
+ let detail=service.detail(user,result.id);assert.equal(detail.operations[0].classification.nature,'personal');assert.equal(detail.operations[1].classification.nature,'mixed');assert.equal(service.personalFinance.read(user).totals.personalBankCents,700);assert.equal(service.personalFinance.read(user).totals.professionalCents,1300);
+ await assert.rejects(()=>service.handle(user,{action:'match',statementId:result.id,operationKey:credit.key,kind:'settlements',targetId:1}),/personnelle/);
+ service.personalFinance.handle(user,{action:'allocate',statementId:result.id,operationKey:debit.key,expectedVersion:1,type:'expense',personalCents:2000,professionalCents:0,category:'BIM',method:'TPE'});assert.equal(service.detail(user,result.id).operations[1].classification.nature,'personal');
+ }finally{db.close();}
+});
