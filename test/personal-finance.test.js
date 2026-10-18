@@ -20,3 +20,14 @@ test('invalid splits, stale edits and unauthorized access are rejected; personal
  assert.equal(state.settlements.length,1);assert.equal(state.settlements[0].amountCents,50000);
  db.prepare('INSERT INTO bank_matches VALUES(?,?,?,?,?,?)').run(1,'withdrawal','settlements',20,'Admin','now');assert.throws(()=>run({action:'allocate',operationKey:'withdrawal',expectedVersion:0,type:'withdrawal',personalCents:0,professionalCents:0}),/déjà rapprochée/);
  }finally{db.close();}});
+test('professional subtypes validate counterparties and retain professional metadata in allocations',()=>{
+ const {normalizeImportClassification}=require('../personal-finance');const op={debitCents:50000,creditCents:0},list=k=>({clients:[{id:1,name:'Client A',active:true},{id:2,name:'Inactive',active:false}],suppliers:[{id:3,name:'Supplier A'}],jumiaStores:[{id:4,name:'Store A'}]}[k]||[]);
+ assert.equal(normalizeImportClassification(op,{nature:'professional',professionalType:'client',professionalPartyId:1},list).professionalName,'Client A');
+ assert.equal(normalizeImportClassification(op,{nature:'professional',professionalType:'supplier',professionalPartyId:3},list).professionalName,'Supplier A');
+ assert.equal(normalizeImportClassification(op,{nature:'professional',professionalType:'jumia',professionalPartyId:4},list).professionalName,'Store A');
+ assert.equal(normalizeImportClassification(op,{nature:'professional',professionalType:'delivery',deliveryCompany:' Ozon Express '},list).professionalName,'Ozon Express');
+ assert.throws(()=>normalizeImportClassification(op,{nature:'professional',professionalType:'client',professionalPartyId:2},list),/inactif/);
+ assert.throws(()=>normalizeImportClassification(op,{nature:'professional',professionalType:''},list),/Choisissez/);
+ assert.throws(()=>normalizeImportClassification(op,{nature:'professional',professionalType:'delivery'},list),/société/);
+ const {db,service,user,run}=setup();try{run({action:'allocate',operationKey:'card',expectedVersion:0,type:'expense',personalCents:0,professionalCents:50000,category:'Autre',method:'TPE',professionalType:'delivery',deliveryCompany:'Delivery A'});const a=service.read(user).operations.find(o=>o.key==='card').allocation;assert.equal(a.professionalType,'delivery');assert.equal(a.professionalName,'Delivery A');}finally{db.close();}
+});
