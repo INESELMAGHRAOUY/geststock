@@ -41,7 +41,7 @@ function parseCdmPages(pages){
  const direction=(r,item)=>{const right=(item.transform[4]+item.width)/r.width,debit=Math.abs(right-columns[0])<0.015,credit=Math.abs(right-columns[1])<0.015;if(debit===credit)throw Error('Sens débit / crédit CDM ambigu');return debit?'debit':'credit';};
  const balance=r=>{const d=r.text.match(/(\d{2})\/(\d{2})\/(\d{4})/),a=amounts(r);if(!d||a.length!==1)throw Error('Solde CDM illisible');return {date:date(d[1],d[2],d[3]),cents:money(a[0].str)*(direction(r,a[0])==='debit'?-1:1)};};
  const opening=balance(starts[0]),closing=balance(ends[0]);if(opening.date>=closing.date)throw Error('Période CDM invalide');
- let debitCents=0,creditCents=0;const operations=[],categories=new Set(['CARTES','CHEQUES','OPERATIONS DIVERSES','VERSEMENTS ET RETRAITS D ESPECES','VIREMENTS','VIREMENTS ET MISES A DISPOSITION']);
+ let debitCents=0,creditCents=0;const operations=[],categories=new Set(['BANQUE A DISTANCE','CARTES','CHEQUES','OPERATIONS DIVERSES','VERSEMENTS ET RETRAITS D ESPECES','VIREMENTS','VIREMENTS ET MISES A DISPOSITION']);
  for(let pageIndex=0;pageIndex<pageRows.length;pageIndex++){
   const rows=pageRows[pageIndex],header=rows.find(r=>/Date Opération/.test(r.text)&&/Libellé/.test(r.text)),total=rows.find(r=>/TOTAL MOUVEMENTS/.test(r.text)),pageNumber=total?.text.match(/FEUILLET (\d+)/);
   if(!header||!total||!pageNumber||Number(pageNumber[1])!==pageIndex+1)throw Error('Page CDM manquante, répétée ou désordonnée');
