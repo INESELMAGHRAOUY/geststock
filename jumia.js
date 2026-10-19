@@ -21,7 +21,10 @@ function handleJumia({db,body,user,list,save,kind,outerTransaction=false,allowSt
  const delegateId=user.access_profile==='jumia_delegate'?user.id:list('jumiaStores').find(s=>s.id===(old?.storeId??body.storeId))?.delegateOwnerId;const stockOwnerId=kind==='jumiaOrders'?(old?.stockOwnerId||(delegateId&&!old?.lines.some(l=>l.dispatched)?delegateId:null)):null;const ownerCost=line=>delegateCost(stockOwnerId,line,list('delegatePurchases'),list('jumiaStores'));
  if(old){if(user.role!=='admin')throw Error('Modification réservée aux administrateurs');if(JSON.stringify(old)!==body.expectedRecord)throw Error('Cet élément a changé. Rouvrez le formulaire');if(!body.reason?.trim())throw Error('Motif obligatoire');}
  let updated;
- if(body.action==='cancellationResponsibility'){
+ if(body.action==='listingSid'){
+ if(kind!=='jumiaStores'||!old||typeof body.catalogSid!=='string'||!/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i.test(body.catalogSid.trim())||!old.listings?.some(l=>l.id===body.listingId))throw Error('PRODUCT_SID ou listing invalide');
+ updated={...old,listings:old.listings.map(l=>l.id===body.listingId?{...l,catalogSid:body.catalogSid.trim()}:l)};
+ }else if(body.action==='cancellationResponsibility'){
  if(kind!=='jumiaOrders'||!old||!old.lines.some(l=>l.status==='Annulé')||(body.cancellationOnClient!==null&&typeof body.cancellationOnClient!=='boolean'))throw Error('Attribution annulation invalide');
  updated={...old,cancellationOnClient:body.cancellationOnClient};
  }else if(body.action==='ready'){
