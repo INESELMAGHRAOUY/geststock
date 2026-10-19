@@ -380,6 +380,7 @@ const server=http.createServer(async(req,res)=>{
  if(body.telegramUrl!==undefined)body.telegramUrl=telegramProductUrl(body.telegramUrl);
  if(body.supplierUrl!==undefined)body.supplierUrl=supplierUrl(body.supplierUrl);
  if(body.parabudgetUrl!==undefined)body.parabudgetUrl=supplierUrl(body.parabudgetUrl,'parabudget');
+ if(body.universparaUrl!==undefined)body.universparaUrl=supplierUrl(body.universparaUrl,'universpara');
  if(body.imageUrl){let url;try{url=new URL(body.imageUrl);}catch{throw Error('URL image invalide');}if(url.protocol!=='https:'||url.hostname!=='vendorcenter.jumia.com')throw Error('URL image Jumia invalide');}
  delete body.imageId;delete body.imageName;
  if(body.image)productImage=readProductImage(body.image);delete body.image;
