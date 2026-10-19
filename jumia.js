@@ -21,7 +21,10 @@ function handleJumia({db,body,user,list,save,kind,outerTransaction=false,allowSt
  const delegateId=user.access_profile==='jumia_delegate'?user.id:list('jumiaStores').find(s=>s.id===(old?.storeId??body.storeId))?.delegateOwnerId;const stockOwnerId=kind==='jumiaOrders'?(old?.stockOwnerId||(delegateId&&!old?.lines.some(l=>l.dispatched)?delegateId:null)):null;const ownerCost=line=>delegateCost(stockOwnerId,line,list('delegatePurchases'),list('jumiaStores'));
  if(old){if(user.role!=='admin')throw Error('Modification réservée aux administrateurs');if(JSON.stringify(old)!==body.expectedRecord)throw Error('Cet élément a changé. Rouvrez le formulaire');if(!body.reason?.trim())throw Error('Motif obligatoire');}
  let updated;
- if(body.action==='ready'){
+ if(body.action==='cancellationResponsibility'){
+ if(kind!=='jumiaOrders'||!old||!old.lines.some(l=>l.status==='Annulé')||(body.cancellationOnClient!==null&&typeof body.cancellationOnClient!=='boolean'))throw Error('Attribution annulation invalide');
+ updated={...old,cancellationOnClient:body.cancellationOnClient};
+ }else if(body.action==='ready'){
  if(kind!=='jumiaOrders'||!old||old.active===false||!old.lines.some(l=>l.status==='En attente'))throw Error('Aucune ligne en attente à préparer');
  updated={...old,lines:old.lines.map(l=>l.status==='En attente'?{...l,status:'Prêt à expédier'}:l)};
  }else if(body.action==='ship'){
@@ -85,6 +88,7 @@ function handleJumia({db,body,user,list,save,kind,outerTransaction=false,allowSt
  updated={storeId:store.id,storeName:store.name,hubId:hub?.id||null,hubName:hub?.name||'',hubCity:hub?.city||'',hubAddress:hub?.address||'',shippingProviderCode:providerCode(body.shippingProviderCode??old?.shippingProviderCode),number:body.number.trim(),date:body.date,shippedDate:body.shippedDate??old?.shippedDate??'',csvUpdatedAt:body.csvUpdatedAt??old?.csvUpdatedAt??'',customer:String(body.customer||''),address:String(body.address||''),paymentMethod:String(body.paymentMethod||'À la livraison'),shippingMethod:String(body.shippingMethod||'Dropshipping'),tracking:String(body.tracking||''),notes:String(body.notes||''),lines,costs,active:old?.active!==false};
  }
  if(kind==='jumiaOrders'){
+ if(body.action!=='cancellationResponsibility'&&old?.cancellationOnClient!==undefined)updated.cancellationOnClient=old.cancellationOnClient;
  if(stockOwnerId){updated.stockOwnerId=stockOwnerId;updated.lines=updated.lines.map(l=>({...l,fromStock:false,...(!old?.stockOwnerId?{purchasePrice:ownerCost(l).price,purchaseSourceId:ownerCost(l).id}:{})}));const stores=list('jumiaStores'),delta=new Map();for(const [key,qty] of delegateConsumption(old||{lines:[]},stores))delta.set(key,(delta.get(key)||0)+qty);for(const [key,qty] of delegateConsumption(updated,stores))delta.set(key,(delta.get(key)||0)-qty);for(const line of updated.lines){const key=stockKey(line,stores),change=delta.get(key)||0;if(!allowStockShortage&&change<0&&delegateBalance(stockOwnerId,line,list('delegatePurchases'),list('jumiaOrders'),stores,list('delegateInventories'))+change<0)throw Error('Votre stock est insuffisant : '+line.name);}}
  if(updated.lines.some(l=>['La livraison a échoué','Retourné'].includes(l.status))&&!old?.lines.some(l=>['La livraison a échoué','Retourné'].includes(l.status)))updated.costs={...updated.costs,returnTransport:body.costs?.returnTransport>0?body.costs.returnTransport:20};
  const delta=new Map();for(const [id,q] of jumiaStockLines(old||{lines:[]}))delta.set(id,(delta.get(id)||0)-q);for(const [id,q] of jumiaStockLines(updated))delta.set(id,(delta.get(id)||0)+q);
