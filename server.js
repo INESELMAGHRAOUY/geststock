@@ -1,5 +1,3 @@
-const {createBankImportService}=require('./bank-import');
-const {normalizeProductVariant}=require('./product-variants');
 const {readProductAudit}=require('./product-audit');
 const {productQuantityMode,validateProductQuantity}=require('./public/product-quantity');
 const {assertUniquePurchaseReference}=require('./public/purchase-reference');
@@ -40,7 +38,7 @@ const crypto = require('node:crypto');
 const {handleJumia}=require('./jumia');
 const {handleSettlement}=require('./settlements');
 const {purchaseLines}=require('./purchase');
-const {stockBreakdown,catalogueStock,initializeStock}=require('./stock');
+const {stockBreakdown,initializeStock}=require('./stock');
 const {setupRecordAudit,auditRecord,handleRecordAdmin}=require('./record-admin');
 const {amountToWords}=require('./public/amount-words');
 const {setupRecurring,syncRecurring}=require('./recurring');
@@ -113,9 +111,7 @@ async function dailyBackup() {
 initialization.then(dailyBackup).catch(()=>{});
 setInterval(dailyBackup,60*60*1000).unref();
 const rawList = kind => db.prepare('SELECT id,data FROM records WHERE kind=? ORDER BY id DESC').all(kind).map(r=>({ ...JSON.parse(r.data),id:r.id}));
-const list=kind=>{const records=rawList(kind);if(kind!=='products')return records;return catalogueStock(records,rawList('movements'),rawList('documents'),rawList('inventories'),rawList('jumiaOrders'),rawList('delegatePurchases'));};
-const bankImport=createBankImportService({db,list});
-const personalFinance=bankImport.personalFinance;
+const list=kind=>{const records=rawList(kind);if(kind!=='products')return records;const movements=rawList('movements'),documents=rawList('documents'),inventories=rawList('inventories'),orders=rawList('jumiaOrders');return records.map(p=>stockBreakdown(p,movements,documents,inventories,orders,rawList('delegatePurchases')));};
 const supplierStock=createSupplierStock({db,list});
 setInterval(()=>supplierStock.daily().catch(()=>{}),60*60*1000).unref();
 setTimeout(()=>supplierStock.daily().catch(()=>{}),3000).unref();
@@ -210,14 +206,9 @@ const server=http.createServer(async(req,res)=>{
  const settings=JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data||'{}'),client=list('clients').find(c=>c.id===invoice.clientId)||{},buffer=await invoicePdf(invoice,settings,client);
  res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition','attachment; filename="document-'+invoice.id+'.pdf"');res.setHeader('Cache-Control','no-store');return res.end(buffer);
  }
- if(req.method==='GET'&&url.pathname==='/api/personal-finance')return res.end(JSON.stringify(personalFinance.read(currentUser)));
- if(req.method==='GET'&&url.pathname==='/api/bank-statements'){return res.end(JSON.stringify({rows:bankImport.summaries(currentUser)}));}
- if(req.method==='GET'&&/^\/api\/bank-statements\/\d+(?:\/pdf)?$/.test(url.pathname)){const id=Number(url.pathname.split('/')[3]);if(url.pathname.endsWith('/pdf')){const bytes=bankImport.pdf(currentUser,id);res.setHeader('Content-Type','application/pdf');res.setHeader('Content-Disposition','attachment; filename="releve-'+id+'.pdf"');return res.end(Buffer.from(bytes));}return res.end(JSON.stringify(bankImport.detail(currentUser,id)));}
  if(req.method==='GET' && url.pathname==='/api/state'){syncRecurring(db);const principal=principalJumiaState(list,db.prepare('SELECT access_profile,jumia_store_ids FROM users').all());return res.end(JSON.stringify(Object.fromEntries([...kinds.map(k=>[k,currentUser.role!=='admin'&&['delegateProducts','delegateSuppliers','delegatePurchases','jumiaDeliveryRequests','delegateDeliveryTariffs','delegateDeliveryBills'].includes(k)?[]:principal.read(k)]),['recurringCharges',db.prepare('SELECT * FROM recurring_charges ORDER BY id').all().map(x=>({id:x.id,label:x.label,category:x.category,amount:x.amount_cents/100,active:!!x.active,startMonth:x.start_month,lastMonth:x.last_month,supplierId:x.supplier_id||null,supplierName: list('suppliers').find(s=>s.id===x.supplier_id)?.name||''}))],['expenseLifecycleHistory',currentUser.role==='admin'?db.prepare('SELECT id,expense_id AS expenseId,action,reason,actor,at,snapshot FROM expense_lifecycle_history ORDER BY id DESC').all().map(x=>({...x,snapshot:JSON.parse(x.snapshot)})):[]],['recordAudit',currentUser.role==='admin'?db.prepare('SELECT id,kind,record_id AS recordId,action,actor,at,reason,before_data,after_data FROM record_audit ORDER BY id DESC').all().map(x=>({...x,before:JSON.parse(x.before_data),after:JSON.parse(x.after_data),before_data:undefined,after_data:undefined})):[]],['delegateManagementOrders',currentUser.role==='admin'?principal.managementOrders:[]],['delegateManagementStores',currentUser.role==='admin'?principal.managementStores:[]],['currentUser',publicUser(currentUser)],['users',currentUser.role==='admin'?db.prepare('SELECT id,username,name,email,email_verified,phone,whatsapp,approval_status,requested_at,role,active,access_profile,jumia_store_ids FROM users ORDER BY id').all().map(publicUser):[]],['passwordResetEmailReady',currentUser.role==='admin'&&resetMailer.ready],['supplierStock',supplierStock.read()],['settings',JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data || '{}')]])));}
  if(req.method==='GET'&&url.pathname==='/api/jumiaBrands'){const q=(url.searchParams.get('q')||'').trim(),requested=Number(url.searchParams.get('offset')||0),offset=Number.isSafeInteger(requested)&&requested>=0?requested:0;const total=db.prepare('SELECT COUNT(*) AS n FROM jumia_brands').get().n;let rows=[],matched=0;if(!q){matched=total;rows=db.prepare('SELECT * FROM jumia_brands ORDER BY name,id LIMIT 50 OFFSET ?').all(offset);}else if(q.length>=3){const pattern='%'+q.replace(/[\\%_]/g,'')+'%';matched=db.prepare('SELECT COUNT(*) AS n FROM jumia_brands WHERE name LIKE ? OR code=?').get(pattern,q).n;rows=db.prepare('SELECT * FROM jumia_brands WHERE name LIKE ? OR code=? ORDER BY name,id LIMIT 50 OFFSET ?').all(pattern,q,offset);}if(isJumiaDelegate(currentUser)){const own=new Set(list('delegateBrandOwnership').filter(r=>r.ownerId===currentUser.id).map(r=>r.brandId));rows=rows.map(r=>({...r,delegateEditable:own.has(r.id)}));}return res.end(JSON.stringify({rows,total,matched,offset}));}
- let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>(['/api/jumiaBrands','/api/jumiaCatalogImports','/api/jumiaDelegateWorkspace','/api/jumiaDeliveryRequests'].includes(url.pathname)?17000000:['/api/expensePayments','/api/bank-statements'].includes(url.pathname)?7500000:['/api/products','/api/jumiaCategories','/api/jumiaDelegateProducts'].includes(url.pathname)?4500000:['/api/jumiaReports','/api/jumiaOrderImports','/api/jumiaDelegateImports','/api/jumiaDelegateStockExport','/api/jumiaFuelAnalysis'].includes(url.pathname)?4500000:1000000))throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');let productImage=null,removeProductImage=false;
- if(url.pathname==='/api/personal-finance'&&req.method==='POST')return res.end(JSON.stringify(personalFinance.handle(currentUser,body)));
- if(url.pathname==='/api/bank-statements'&&req.method==='POST')return res.end(JSON.stringify(await bankImport.handle(currentUser,body)));
+ let raw='';for await(const chunk of req){raw+=chunk;if(raw.length>(['/api/jumiaBrands','/api/jumiaCatalogImports','/api/jumiaDelegateWorkspace','/api/jumiaDeliveryRequests'].includes(url.pathname)?17000000:url.pathname==='/api/expensePayments'?7500000:['/api/products','/api/jumiaCategories','/api/jumiaDelegateProducts'].includes(url.pathname)?4500000:['/api/jumiaReports','/api/jumiaOrderImports','/api/jumiaDelegateImports','/api/jumiaDelegateStockExport','/api/jumiaFuelAnalysis'].includes(url.pathname)?4500000:1000000))throw Error('Requête trop volumineuse');}const body=JSON.parse(raw||'{}');let productImage=null,removeProductImage=false;
  if(url.pathname==='/api/user-approval'&&req.method==='POST'){if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs'}));}const result=reviewAccount({db,body,actor:currentUser});revokeUser(body.id);return res.end(JSON.stringify(result));}
  if(url.pathname==='/api/users' && req.method==='POST') {
  if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès réservé aux administrateurs.'}));}
@@ -378,31 +369,27 @@ const server=http.createServer(async(req,res)=>{
  }
  if(req.method==='DELETE')throw Error('Utilisez Désactiver : aucun élément ne doit être supprimé');
  if(req.method!=='POST')throw Error('Méthode non autorisée');
- let productSnapshot;
  if(kind==='products'){
- productSnapshot=list('products');
- Object.assign(body,normalizeProductVariant(body,productSnapshot));
  if(body.quantityMode!==undefined&&!['unit','decimal'].includes(body.quantityMode))throw Error('Mode de quantité invalide');
- body.quantityMode=body.quantityMode||productQuantityMode({...productSnapshot.find(p=>p.id===body.id),...body});
+ body.quantityMode=body.quantityMode||productQuantityMode({...list('products').find(p=>p.id===body.id),...body});
  validateProductQuantity(body,body.stock);validateProductQuantity(body,body.min);
  if(body.removeImage!==undefined&&typeof body.removeImage!=='boolean')throw Error('Choix image invalide');
  removeProductImage=body.removeImage===true;delete body.removeImage;if(removeProductImage&&body.image)throw Error('Choisissez retirer ou remplacer l’image');
  if(body.productType!==undefined&&!['PARA','ECOM','PROF'].includes(body.productType))throw Error('Type de produit invalide');
- body.productType=body.productType||productType({...productSnapshot.find(p=>p.id===body.id),...body});
+ body.productType=body.productType||productType({...list('products').find(p=>p.id===body.id),...body});
  if(body.telegramUrl!==undefined)body.telegramUrl=telegramProductUrl(body.telegramUrl);
  if(body.supplierUrl!==undefined)body.supplierUrl=supplierUrl(body.supplierUrl);
  if(body.parabudgetUrl!==undefined)body.parabudgetUrl=supplierUrl(body.parabudgetUrl,'parabudget');
  if(body.imageUrl){let url;try{url=new URL(body.imageUrl);}catch{throw Error('URL image invalide');}if(url.protocol!=='https:'||url.hostname!=='vendorcenter.jumia.com')throw Error('URL image Jumia invalide');}
  delete body.imageId;delete body.imageName;
  if(body.image)productImage=readProductImage(body.image);delete body.image;
- if(body.id===undefined&&(body.color||body.size)&&!productImage)throw Error('Ajoutez une image propre à cette variante avant de l’enregistrer');
 
  for(const key of ['barcode','sku'])if(body[key]!==undefined&&(typeof body[key]!=='string'||body[key].length>150))throw Error('Code-barres ou SKU vendeur invalide');
  if(body.jumiaCommissionPercent!==undefined&&(!Number.isFinite(body.jumiaCommissionPercent)||body.jumiaCommissionPercent<0||body.jumiaCommissionPercent>100))throw Error('Commission Jumia invalide');
  if(body.purchasePrice!==undefined&&(!Number.isFinite(body.purchasePrice)||body.purchasePrice<0))throw Error('Prix d’achat invalide');
  if(typeof body.name!=='string'||!body.name.trim()||![body.price,body.min].every(x=>Number.isFinite(x)&&x>=0)||!Number.isFinite(body.stock)||(body.id===undefined&&body.stock<0))throw Error('Produit invalide');
  if(body.id!==undefined){
- const existing=Number.isSafeInteger(body.id)?productSnapshot.find(p=>p.id===body.id):null;
+ const existing=Number.isSafeInteger(body.id)?list('products').find(p=>p.id===body.id):null;
  if(!existing)throw Error('Produit introuvable');
  if(body.stock!==existing.stock)throw Error('Le stock est calculé automatiquement à partir des achats et ventes');
  if(body.expectedStock!==existing.stock)throw Error('Le stock a changé. Rouvrez le produit avant de modifier.');
@@ -413,7 +400,7 @@ const server=http.createServer(async(req,res)=>{
  if(['clients','suppliers'].includes(kind)){
  if(typeof body.name!=='string'||!body.name.trim())throw Error('Nom obligatoire');
  if(body.id!==undefined&&(!Number.isSafeInteger(body.id)||!db.prepare('SELECT id FROM records WHERE id=? AND kind=?').get(body.id,kind)))throw Error('Contact introuvable');
- for(const key of ['phone','email','address','city','ice'])if(body[key]!==undefined&&typeof body[key]!=='string')throw Error('Informations de contact invalides');
+ for(const key of ['phone','email','address','ice'])if(body[key]!==undefined&&typeof body[key]!=='string')throw Error('Informations de contact invalides');
  body.name=body.name.trim();
  }
  if(kind==='documents'){
@@ -455,14 +442,14 @@ const server=http.createServer(async(req,res)=>{
  }
  if(body.id!==undefined){
  if(currentUser.role!=='admin'){res.writeHead(403);return res.end(JSON.stringify({error:'Accès administrateur requis'}));}
- const old=(productSnapshot||list(kind)).find(x=>x.id===body.id);if(!old)throw Error('Élément introuvable');
+ const old=list(kind).find(x=>x.id===body.id);if(!old)throw Error('Élément introuvable');
  const updated={...old,...body,active:old.active!==false,updatedAt:new Date().toISOString(),updatedBy:currentUser.name};delete updated.expectedStock;if(kind==='products'&&removeProductImage){updated.imageId=null;updated.imageName='';updated.imageUrl='';}
- db.exec('BEGIN');try{if(productImage){updated.imageId=Number(db.prepare('INSERT INTO product_images(name,mime,content) VALUES(?,?,?)').run(productImage.name,productImage.mime,productImage.bytes).lastInsertRowid);updated.imageName=productImage.name;}save(kind,updated,old.id);auditRecord(db,kind,old,updated,currentUser,'Modification','Correction via le formulaire');db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}const result={id:old.id};if(kind==='products'){result.product={...updated,lastPurchasePrice:updated.purchaseSourceId?updated.lastPurchasePrice:updated.purchasePrice??0};const audit=db.prepare('SELECT id,kind,record_id AS recordId,action,actor,at,reason,before_data,after_data FROM record_audit WHERE kind=? AND record_id=? ORDER BY id DESC LIMIT 1').get(kind,old.id);if(audit){result.recordAudit={...audit,before:JSON.parse(audit.before_data),after:JSON.parse(audit.after_data)};delete result.recordAudit.before_data;delete result.recordAudit.after_data;}}return res.end(JSON.stringify(result));
+ db.exec('BEGIN');try{if(productImage){updated.imageId=Number(db.prepare('INSERT INTO product_images(name,mime,content) VALUES(?,?,?)').run(productImage.name,productImage.mime,productImage.bytes).lastInsertRowid);updated.imageName=productImage.name;}save(kind,updated,old.id);auditRecord(db,kind,old,updated,currentUser,'Modification','Correction via le formulaire');db.exec('COMMIT');}catch(e){db.exec('ROLLBACK');throw e;}return res.end(JSON.stringify({id:old.id}));
  }
- if(kind==='products'){db.exec('BEGIN');try{if(productImage){body.imageId=Number(db.prepare('INSERT INTO product_images(name,mime,content) VALUES(?,?,?)').run(productImage.name,productImage.mime,productImage.bytes).lastInsertRowid);body.imageName=productImage.name;}const product={...body,active:true,createdAt:new Date().toISOString(),createdBy:currentUser.name};const id=save(kind,product);db.exec('COMMIT');return res.end(JSON.stringify({id,product:stockBreakdown({...product,id},[],[])}));}catch(e){db.exec('ROLLBACK');throw e;}}
+ if(kind==='products'){db.exec('BEGIN');try{if(productImage){body.imageId=Number(db.prepare('INSERT INTO product_images(name,mime,content) VALUES(?,?,?)').run(productImage.name,productImage.mime,productImage.bytes).lastInsertRowid);body.imageName=productImage.name;}const id=save(kind,{...body,active:true,createdAt:new Date().toISOString(),createdBy:currentUser.name});db.exec('COMMIT');return res.end(JSON.stringify({id}));}catch(e){db.exec('ROLLBACK');throw e;}}
  return res.end(JSON.stringify({id:save(kind,{...body,active:true})}));
  }
- const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','bank-import.js','personal-finance.js','style.css','login.js','login-history.js','sales-history.js','whatsapp.js','invoice-share.js','supplier-stock.js','product-autocomplete.js','product-pickers.js','product-type.js','product-image-controls.js','purchase-reference.js','product-quantity.js','purchase-drafts.js','product-audit.js','form-submission.js','barcode-scanner.js','zxing-browser.min.js','zxing-browser.LICENSE','google-complete.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia.js','jumia-import.js','jumia-delegate.js','delegate-purchases.js','jumia-delivery-requests.js','delivery-pricing.js','jumia-temporary-math.js','jumia-temporary.js'].includes(file)){res.writeHead(404);return res.end();}
+ const file=url.pathname==='/'?'index.html':url.pathname.slice(1);if(!['index.html','app.js','style.css','login.js','login-history.js','sales-history.js','whatsapp.js','invoice-share.js','supplier-stock.js','product-autocomplete.js','product-pickers.js','product-type.js','product-image-controls.js','purchase-reference.js','product-quantity.js','purchase-drafts.js','product-audit.js','form-submission.js','barcode-scanner.js','zxing-browser.min.js','zxing-browser.LICENSE','google-complete.js','charges.js','amount-words.js','cheque-print.js','admin-records.js','settlement-math.js','settlements.js','jumia-math.js','jumia-out-of-stock.js','jumia.js','jumia-import.js','jumia-delegate.js','delegate-purchases.js','jumia-delivery-requests.js','delivery-pricing.js','jumia-temporary-math.js','jumia-temporary.js'].includes(file)){res.writeHead(404);return res.end();}
  if(file==='index.html')recordVisit({db,req,res,user:currentUser,page:'/',secure:cookieName.startsWith('__Host-')});
  res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');const content=fs.readFileSync(path.join(__dirname,'public',file));res.end(file.endsWith('.html')?versionHtml(content.toString('utf8'),appRelease):content);
  }catch(e){res.writeHead(e.status||400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e.message}));}

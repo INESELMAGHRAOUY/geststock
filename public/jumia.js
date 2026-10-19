@@ -26,6 +26,7 @@ function jumiaActions(kind,r){if(state.currentUser.role==='jumia_delegate'&&['ju
 let jumiaDefaultPeriodInitialized=false;
 function initializeJumiaMonth(){if(jumiaDefaultPeriodInitialized)return;jumiaDefaultPeriodInitialized=true;if(jumiaFilters.from||jumiaFilters.to)return;const today=typeof chargeDate==='function'?chargeDate():new Date().toISOString().slice(0,10),[year,month]=today.split('-').map(Number);jumiaFilters.from=today.slice(0,7)+'-01';jumiaFilters.to=new Date(Date.UTC(year,month,0)).toISOString().slice(0,10);}
 function renderJumia(){
+ if(page==='jumiaOutOfStock')return renderJumiaOutOfStock();
  if(['jumiaOrders','jumiaDashboard','jumiaGraphs'].includes(page))initializeJumiaMonth();
  if(page==='jumiaGraphs'){const orders=jumiaFiltered();return `<div class="panel"><h3>Rapports Jumia</h3>${jumiaFilterMarkup()}</div>`+['orders','stores','articles'].map(mode=>jumiaReportMarkup(orders,mode)).join('');}
  if(page==='jumiaFuelAnalysis')return (state.currentUser.role==='jumia_delegate'?'<p><button type="button" data-page="delegateFuel">Enregistrer / modifier mes pleins gasoil</button></p>':'')+renderJumiaFuelAnalysis();
