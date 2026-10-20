@@ -197,8 +197,8 @@ const server=http.createServer(async(req,res)=>{
  if(req.method==='GET'&&url.pathname==='/api/state')return res.end(JSON.stringify(workspaceState({user:currentUser,list,kinds,supplierChecks:supplierStock.read()})));
  }
  if(req.method==='GET'&&/^\/api\/delivery-documents\/\d+$/.test(url.pathname)){const doc=deliveryDocument(db,Number(url.pathname.split('/')[3]),currentUser,list);if(!doc){res.writeHead(404);return res.end('{}');}res.setHeader('Content-Type',doc.mime);res.setHeader('Content-Disposition',"inline; filename*=UTF-8''"+encodeURIComponent(doc.name));res.setHeader('X-Content-Type-Options','nosniff');return res.end(Buffer.from(doc.content));}
- if(url.pathname==='/api/jumiaConnectionStatus'&&req.method==='GET')return res.end(JSON.stringify(jumiaConnection.status(currentUser)));
- if(url.pathname==='/api/jumiaConnection'&&req.method==='GET')return res.end(JSON.stringify({shops:await jumiaConnection.shops(currentUser),links:jumiaApiCatalog.links(currentUser)}));
+ if(url.pathname==='/api/jumiaConnectionStatus'&&req.method==='GET')return res.end(JSON.stringify({...jumiaConnection.status(currentUser),reading:jumiaApiCatalog.running(currentUser)}));
+ if(url.pathname==='/api/jumiaConnection'&&req.method==='GET')return res.end(JSON.stringify(await jumiaApiCatalog.overview(currentUser)));
  if(url.pathname==='/api/supplierEmailPreferences'&&req.method==='GET')return res.end(JSON.stringify(supplierEmails.preferences(currentUser)));
  if(url.pathname==='/api/jumiaDelegateAvailability'){if(req.method!=='GET'||!isJumiaDelegate(currentUser)){res.writeHead(403);return res.end(JSON.stringify({error:'Compte délégué requis'}));}return res.end(JSON.stringify(delegateAvailability(currentUser,list)));}
  if(url.pathname==='/api/jumiaDelegateCatalogNotifications'){if(req.method!=='GET'||!isJumiaDelegate(currentUser)){res.writeHead(403);return res.end(JSON.stringify({error:'Compte délégué requis'}));}return res.end(JSON.stringify(catalogNotifications(currentUser,list)));}
