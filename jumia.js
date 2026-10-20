@@ -21,7 +21,11 @@ function handleJumia({db,body,user,list,save,kind,outerTransaction=false,allowSt
  const delegateId=user.access_profile==='jumia_delegate'?user.id:list('jumiaStores').find(s=>s.id===(old?.storeId??body.storeId))?.delegateOwnerId;const stockOwnerId=kind==='jumiaOrders'?(old?.stockOwnerId||(delegateId&&!old?.lines.some(l=>l.dispatched)?delegateId:null)):null;const ownerCost=line=>delegateCost(stockOwnerId,line,list('delegatePurchases'),list('jumiaStores'));
  if(old){if(user.role!=='admin')throw Error('Modification réservée aux administrateurs');if(JSON.stringify(old)!==body.expectedRecord)throw Error('Cet élément a changé. Rouvrez le formulaire');if(!body.reason?.trim())throw Error('Motif obligatoire');}
  let updated;
- if(body.action==='listingSid'){
+ if(body.action==='listingSids'){
+ if(kind!=='jumiaStores'||!old||!Array.isArray(body.updates)||!body.updates.length||body.updates.length>10000||new Set(body.updates.map(r=>r.listingId)).size!==body.updates.length)throw Error('Import PRODUCT_SID invalide');
+ const changes=new Map();for(const row of body.updates){const listing=old.listings?.find(l=>l.id===row.listingId);if(!listing||typeof row.catalogSid!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(row.catalogSid.trim()))throw Error('PRODUCT_SID ou listing invalide');const sid=row.catalogSid.trim();if(listing.catalogSid&&listing.catalogSid.toLowerCase()!==sid.toLowerCase())throw Error('PRODUCT_SID différent du listing : '+listing.sku);changes.set(row.listingId,sid);}
+ updated={...old,listings:old.listings.map(l=>changes.has(l.id)?{...l,catalogSid:changes.get(l.id)}:l)};
+ }else if(body.action==='listingSid'){
  if(kind!=='jumiaStores'||!old||typeof body.catalogSid!=='string'||!/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i.test(body.catalogSid.trim())||!old.listings?.some(l=>l.id===body.listingId))throw Error('PRODUCT_SID ou listing invalide');
  updated={...old,listings:old.listings.map(l=>l.id===body.listingId?{...l,catalogSid:body.catalogSid.trim()}:l)};
  }else if(body.action==='cancellationResponsibility'){
