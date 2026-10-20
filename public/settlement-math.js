@@ -4,6 +4,12 @@
  function billBalances(state,side,excludeId){return tradeBills(state,side).map(b=>{
  let paidCents=0,pendingCents=0;for(const p of state.settlements||[])if(p.id!==excludeId&&p.active!==false&&p.side===side)for(const a of p.allocations)if(a.billId===b.id){if(p.status==='pending')pendingCents+=a.amountCents;else paidCents+=a.amountCents;}
  return {...b,paidCents,pendingCents,remainingCents:b.totalCents-paidCents,availableCents:b.totalCents-paidCents-pendingCents};});}
+ function clientStatement(state,clientId){
+ const bills=billBalances(state,'client').filter(b=>b.partyId===clientId),payments=(state.settlements||[]).filter(p=>p.active!==false&&p.side==='client'&&p.partyId===clientId),rows=bills.map(b=>({date:b.date,reference:b.reference,label:'Facture',debitCents:b.totalCents,creditCents:0}));
+ for(const p of payments)if(p.status==='validated')rows.push({date:String(p.clearedDate||p.date||'').slice(0,10),reference:p.reference||p.chequeNumber||'#'+p.id,label:'Règlement — '+(p.method||''),debitCents:0,creditCents:p.amountCents??cents(p.amount)});
+ rows.sort((a,b)=>a.date.localeCompare(b.date)||(b.debitCents-a.debitCents));let balance=0;for(const row of rows){balance+=row.debitCents-row.creditCents;row.balanceCents=balance;}
+ return {rows,totalCents:rows.reduce((n,r)=>n+r.debitCents,0),paidCents:rows.reduce((n,r)=>n+r.creditCents,0),balanceCents:balance,pending:payments.filter(p=>p.status==='pending')};
+ }
  function tradeSummary(state){const suppliers=billBalances(state,'supplier'),clients=billBalances(state,'client');const payable=suppliers.reduce((s,b)=>s+b.remainingCents,0),receivable=clients.reduce((s,b)=>s+b.remainingCents,0);return {payable,receivable,net:receivable-payable,purchases:suppliers.reduce((s,b)=>s+b.totalCents,0),supplierPaid:suppliers.reduce((s,b)=>s+b.paidCents,0),sales:clients.reduce((s,b)=>s+b.totalCents,0),clientPaid:clients.reduce((s,b)=>s+b.paidCents,0)};}
  function validateAllocation(state,side,allocations,excludeId,partyId){const balances=billBalances(state,side,excludeId);for(const a of allocations){const bill=balances.find(b=>b.id===a.billId);if(!bill||(partyId!==undefined&&bill.partyId!==partyId)||a.amountCents>bill.availableCents)throw Error('Un bon a changé ou le règlement dépasse son solde');}}
  function treasuryBalances(state){
@@ -17,6 +23,6 @@
  return {...account,opening,receipts,outgoing,balance:(opening?.amountCents||0)+receipts-outgoing};
  });
  }
- root.tradeBills=tradeBills;root.billBalances=billBalances;root.tradeSummary=tradeSummary;root.validateAllocation=validateAllocation;root.treasuryBalances=treasuryBalances;
- if(typeof module!=='undefined'&&module.exports)module.exports={tradeBills,billBalances,tradeSummary,validateAllocation,treasuryBalances};
+ root.clientStatement=clientStatement;root.tradeBills=tradeBills;root.billBalances=billBalances;root.tradeSummary=tradeSummary;root.validateAllocation=validateAllocation;root.treasuryBalances=treasuryBalances;
+ if(typeof module!=='undefined'&&module.exports)module.exports={clientStatement,tradeBills,billBalances,tradeSummary,validateAllocation,treasuryBalances};
 })(globalThis);
