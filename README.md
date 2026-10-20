@@ -190,7 +190,7 @@ La déconnexion supprime les tokens locaux ; elle ne révoque pas l'application 
 
 #### Import du catalogue via API
 
-Après **Afficher mes boutiques Jumia**, choisir la boutique locale et **Relier cette boutique**, puis **Lire / actualiser le catalogue Jumia**. Lecture paginée de `GET /catalog/products?shopId=…&size=100`, avec contrôle de chaque `product.shop.id`, des curseurs et une limite de 10 000 produits / SKU. Le PRODUCT_SID est `variations[].id`, distinct de l'identifiant du produit parent. Seules les variantes présentes sur `jumia-ma` et non supprimées apparaissent.
+Après **Afficher mes boutiques Jumia**, choisir la boutique locale et **Relier cette boutique**, puis **Lire / actualiser le catalogue Jumia**. Lecture paginée de `GET /catalog/products?shopId=…&size=100&status=ACTIVE`, avec contrôle de chaque `product.shop.id`, des curseurs et une limite de 10 000 produits / SKU. Le PRODUCT_SID est `variations[].id`, distinct de l'identifiant du produit parent. Seules les variantes au statut `ACTIVE` sur `jumia-ma` apparaissent ; le filtrage est aussi vérifié côté serveur même si Jumia renvoie des variantes inactives. Les anciennes prévisualisations contenant des SKU non actifs ne peuvent plus être enregistrées pour ces lignes.
 
 La prévisualisation serveur est privée au compte et à la boutique, expire après 15 minutes et ne peut être consommée qu'une fois. Les SKU conflictuels sont bloqués. Les correspondances nouvelles se proposent uniquement par SKU stock ou code-barres exact et unique ; les liens existants ne sont jamais remplacés. Le sélecteur produit bénéficie de l'autocomplétion partagée. L'utilisateur sélectionne les lignes et confirme à côté du bouton d'enregistrement.
 
