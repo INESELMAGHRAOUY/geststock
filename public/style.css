@@ -60,3 +60,6 @@ aside{overflow-y:auto}aside nav{display:block;margin:24px -22px}aside nav button
 .jumia-restock-alert{border-left:5px solid #228262;background:#f0faf5}.jumia-restock-alert h3{color:#17613c}.jumia-restock-alert li{margin:7px 0}
 
 .price-alert-panel{flex:1 0 100%;max-width:100%;padding:15px;border:1px solid #c8d9df;border-radius:8px}.price-alert-panel>label{display:inline-grid;margin:5px;max-width:100%}.price-alert-panel input{width:160px}.price-loss{padding:12px;background:#fff0eb;color:#a12c1d;border-radius:8px}.price-estimate{padding:12px;background:#edf5f7;color:#24485b;border-radius:8px}
+
+/* Keep action labels readable when a table is crowded or translated. */
+td button{display:inline-block;min-width:max-content;max-width:none;flex-shrink:0;white-space:nowrap;font-family:system-ui,sans-serif;font-size:12px;line-height:1.4;text-indent:0;overflow:visible}td.table-actions{min-width:160px}td.table-actions button{margin:3px;padding:8px 10px}td button.secondary{color:#35556a}td button.danger{color:#b95232}
