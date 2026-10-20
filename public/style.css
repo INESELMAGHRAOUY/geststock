@@ -61,5 +61,4 @@ aside{overflow-y:auto}aside nav{display:block;margin:24px -22px}aside nav button
 
 .price-alert-panel{flex:1 0 100%;max-width:100%;padding:15px;border:1px solid #c8d9df;border-radius:8px}.price-alert-panel>label{display:inline-grid;margin:5px;max-width:100%}.price-alert-panel input{width:160px}.price-loss{padding:12px;background:#fff0eb;color:#a12c1d;border-radius:8px}.price-estimate{padding:12px;background:#edf5f7;color:#24485b;border-radius:8px}
 
-/* Keep action labels readable when a table is crowded or translated. */
-td button{display:inline-block;min-width:max-content;max-width:none;flex-shrink:0;white-space:nowrap;font-family:system-ui,sans-serif;font-size:12px;line-height:1.4;text-indent:0;overflow:visible}td.table-actions{min-width:160px}td.table-actions button{margin:3px;padding:8px 10px}td button.secondary{color:#35556a}td button.danger{color:#b95232}
+.contact-actions{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:180px}.contact-actions .contact-action{display:inline-flex;align-items:center;justify-content:center;min-width:85px;padding:9px 12px;margin:0;font:12px/1.4 system-ui,sans-serif;white-space:nowrap}.contact-action::before{content:attr(data-action-label)}.contact-action>span{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
