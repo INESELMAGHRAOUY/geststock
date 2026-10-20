@@ -216,3 +216,10 @@ Chaque page complète est enregistrée dans un point de reprise SQLite privé (p
 #### Consulter et importer les produits déjà lus
 
 Après une interruption avec checkpoint, **Voir les produits déjà lus** prépare une prévisualisation à partir des pages sauvegardées, sans nouvel appel Jumia. Elle est clairement marquée **Lecture partielle**, reste filtrée aux variantes actives Maroc et respecte les mêmes contrôles de boutique, compte, fraîcheur, PRODUCT_SID, liens produit et concurrence que l'import complet. L'utilisateur coche les SKU, vérifie les produits et confirme avant toute écriture locale. L'audit indique un import partiel. Le checkpoint reste disponible pour terminer la lecture ultérieurement ; les SKU existants sont rapprochés plutôt que dupliqués. L'expiration du cache reste de 30 minutes et celle de la prévisualisation de 15 minutes. Les erreurs répétées remplacent le bloc d'actions de reprise au lieu de l'ajouter une nouvelle fois.
+
+
+#### Corriger un lien produit existant
+
+Dans la prévisualisation API, **Corriger le lien** ouvre un sélecteur avec autocomplétion pour un listing déjà associé à un produit partagé. Choisir le produit correct et renseigner le motif. L'action dédiée est limitée au compte, à la boutique et à sa prévisualisation non expirée ; elle refuse les changements concurrents, les produits inactifs / PROF et les listings personnels des délégués. Elle change uniquement le produit et le nom du listing : SKU, PRODUCT_SID, prix, commission, shipping, statut et autres listings sont conservés.
+
+Les commandes déjà liées à un produit gardent leur instantané. Les lignes historiques déléguées qui utilisaient encore le repli sur le listing reçoivent explicitement l'ancien productId avant correction, pour conserver leur impact de stock. Les lignes principales sans productId ne sont pas affectées. Le tout est transactionnel et audité. La prévisualisation courante est mise à jour côté serveur et garde les cases déjà cochées côté navigateur. Les prochaines nouvelles commandes utilisent le nouveau lien ; aucune écriture n'est envoyée à Jumia.
