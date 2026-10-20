@@ -64,3 +64,5 @@ aside{overflow-y:auto}aside nav{display:block;margin:24px -22px}aside nav button
 .contact-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:136px}.contact-actions .contact-action{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;min-width:40px;padding:9px;margin:0;border:1px solid transparent}.contact-action svg{display:block;width:20px;height:20px;flex-shrink:0}.contact-action-whatsapp{color:#128c48;background:#e6f6ec}.contact-action-edit{color:#c76a08;background:#fff0dd}.contact-action-delete{color:#c62828;background:#ffebee}.contact-action-restore{color:#35556a;background:#e9f1f5}.contact-action:hover{filter:brightness(.94)}.contact-action:focus-visible{outline:2px solid currentColor;outline-offset:2px}
 
 .contact-action-statement{color:#1769aa;background:#e7f1fc}
+
+.jumia-client-table{overflow-x:auto;margin-top:16px}.jumia-client-table table{border:1px solid #c9d5df}.jumia-client-table th,.jumia-client-table td{border:1px solid #c9d5df;vertical-align:middle}.jumia-client-table th{background:#f4f7fa}
