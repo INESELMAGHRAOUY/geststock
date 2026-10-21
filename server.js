@@ -1,3 +1,4 @@
+const {createJumiaRuptureEmail}=require('./jumia-rupture-email');
 const {createJumiaOrderEmail}=require('./jumia-order-email');
 const {createOrderSync}=require('./jumia-api-order-sync');
 const {createOrderCheck}=require('./jumia-api-order-check');
@@ -129,6 +130,9 @@ setInterval(()=>jumiaOrderCheck.daily(dailyOrderUsers(),undefined,{auto:true}).c
 setTimeout(()=>jumiaOrderCheck.daily(dailyOrderUsers(),undefined,{auto:true}).catch(()=>{}),10000).unref();
 const supplierEmails=createSupplierStockEmail({db,list,mailer:createSupplierAlertMailer()});
 const supplierStock=createSupplierStock({db,list,onResult:result=>supplierEmails.observe(result)});
+const jumiaRuptureEmails=createJumiaRuptureEmail({db,list,catalog:jumiaApiCatalog,connection:jumiaConnection,suppliers:supplierStock,preferences:jumiaOrderEmails.preferences,mailer:createSupplierAlertMailer()});
+setInterval(()=>jumiaRuptureEmails.run().catch(()=>{}),300000).unref();
+setTimeout(()=>jumiaRuptureEmails.run().catch(()=>{}),30000).unref();
 setInterval(()=>supplierStock.daily().then(()=>supplierEmails.flush()).catch(()=>{}),60*60*1000).unref();
 setTimeout(()=>supplierStock.daily().then(()=>supplierEmails.flush()).catch(()=>{}),3000).unref();
 const kinds = ['products','clients','suppliers','documents','cheques','movements','expenses','expensePayments','banks','inventories','settlements','accountOpenings','jumiaStores','jumiaOrders','jumiaHubs','jumiaReports','jumiaCategories','jumiaPayouts','delegateSuppliers','delegatePurchases','delegateProducts','jumiaDeliveryRequests','delegateDeliveryTariffs','delegateDeliveryBills'];
@@ -209,7 +213,7 @@ const server=http.createServer(async(req,res)=>{
  if(req.method==='GET'&&/^\/api\/delivery-documents\/\d+$/.test(url.pathname)){const doc=deliveryDocument(db,Number(url.pathname.split('/')[3]),currentUser,list);if(!doc){res.writeHead(404);return res.end('{}');}res.setHeader('Content-Type',doc.mime);res.setHeader('Content-Disposition',"inline; filename*=UTF-8''"+encodeURIComponent(doc.name));res.setHeader('X-Content-Type-Options','nosniff');return res.end(Buffer.from(doc.content));}
  if(url.pathname==='/api/jumiaConnectionStatus'&&req.method==='GET')return res.end(JSON.stringify({...jumiaConnection.status(currentUser),reading:jumiaApiCatalog.running(currentUser)||jumiaApiCatalog.resumable(currentUser)}));
  if(url.pathname==='/api/jumiaConnection'&&req.method==='GET')return res.end(JSON.stringify(await jumiaApiCatalog.overview(currentUser)));
- if(url.pathname==='/api/jumiaOrderEmailPreferences'&&req.method==='GET')return res.end(JSON.stringify(jumiaOrderEmails.preferences(currentUser)));
+ if(url.pathname==='/api/jumiaOrderEmailPreferences'&&req.method==='GET')return res.end(JSON.stringify({...jumiaOrderEmails.preferences(currentUser),ruptureStatus:jumiaRuptureEmails.status(currentUser)}));
  if(url.pathname==='/api/supplierEmailPreferences'&&req.method==='GET')return res.end(JSON.stringify(supplierEmails.preferences(currentUser)));
  if(url.pathname==='/api/jumiaDelegateAvailability'){if(req.method!=='GET'||!isJumiaDelegate(currentUser)){res.writeHead(403);return res.end(JSON.stringify({error:'Compte délégué requis'}));}return res.end(JSON.stringify(delegateAvailability(currentUser,list)));}
  if(url.pathname==='/api/jumiaDelegateCatalogNotifications'){if(req.method!=='GET'||!isJumiaDelegate(currentUser)){res.writeHead(403);return res.end(JSON.stringify({error:'Compte délégué requis'}));}return res.end(JSON.stringify(catalogNotifications(currentUser,list)));}
