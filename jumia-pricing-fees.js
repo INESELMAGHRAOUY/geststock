@@ -1,0 +1,4 @@
+const {jumiaPricingFees}=require('./public/jumia-pricing-fees');
+function readJumiaPricingFees(db){const exists=db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='settings'").get();return jumiaPricingFees(exists?JSON.parse(db.prepare('SELECT data FROM settings WHERE id=1').get()?.data||'{}'):{});}
+function normalizePricingFeeSettings(body){const out={};for(const key of ['jumiaTransportFee','jumiaPackagingFee'])if(Object.hasOwn(body,key)){const raw=body[key],value=typeof raw==='number'?raw:typeof raw==='string'&&raw.trim()?Number(raw):NaN;if(!Number.isFinite(value)||value<0||!Number.isSafeInteger(Math.round(value*100))||Math.abs(value*100-Math.round(value*100))>0.000001)throw Error('Frais Jumia invalides : montant positif ou nul, avec deux décimales maximum');out[key]=value;}return out;}
+module.exports={readJumiaPricingFees,normalizePricingFeeSettings};
