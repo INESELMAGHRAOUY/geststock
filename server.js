@@ -122,8 +122,8 @@ const jumiaApiCatalog=createJumiaCatalog({db,list,save,connection:jumiaConnectio
 const jumiaOrderSync=createOrderSync({db,list,save,catalog:jumiaApiCatalog,connection:jumiaConnection});
 const jumiaOrderCheck=createOrderCheck({db,list,catalog:jumiaApiCatalog,connection:jumiaConnection,sync:jumiaOrderSync});
 const dailyOrderUsers=()=>db.prepare("SELECT id,name,role,active,access_profile,jumia_store_ids FROM users WHERE active=1").all();
-setInterval(()=>jumiaOrderCheck.daily(dailyOrderUsers()).catch(()=>{}),3600000).unref();
-setTimeout(()=>jumiaOrderCheck.daily(dailyOrderUsers()).catch(()=>{}),10000).unref();
+setInterval(()=>jumiaOrderCheck.daily(dailyOrderUsers(),undefined,{auto:true}).catch(()=>{}),7200000).unref();
+setTimeout(()=>jumiaOrderCheck.daily(dailyOrderUsers(),undefined,{auto:true}).catch(()=>{}),10000).unref();
 const supplierEmails=createSupplierStockEmail({db,list,mailer:createSupplierAlertMailer()});
 const supplierStock=createSupplierStock({db,list,onResult:result=>supplierEmails.observe(result)});
 setInterval(()=>supplierStock.daily().then(()=>supplierEmails.flush()).catch(()=>{}),60*60*1000).unref();
