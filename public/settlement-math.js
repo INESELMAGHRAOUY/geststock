@@ -20,7 +20,8 @@
  for(const p of state.settlements||[])if(p.active!==false&&p.status==='validated'&&accountId(p)===account.id&&(p.clearedDate||p.date)>=start){if(p.side==='client')receipts+=p.amountCents;else outgoing+=p.amountCents;}
  for(const p of state.jumiaPayouts||[])if(p.active!==false&&p.bankId===account.id&&p.date>=start){if(p.amountCents>0)receipts+=p.amountCents;else outgoing-=p.amountCents;}
  for(const p of state.expensePayments||[])if(p.active!==false&&(p.method!=='Chèque'||p.status==='validated')&&accountId(p)===account.id&&(p.clearedDate||p.date)>=start)outgoing+=p.amountCents;
- return {...account,opening,receipts,outgoing,balance:(opening?.amountCents||0)+receipts-outgoing};
+ let transfersIn=0,transfersOut=0,personalOut=0;const seenTransfers=new Set(),seenPersonal=new Set();for(const transfer of state.personalTreasuryFlows?.withdrawals||[]){if(transfer.date<start||seenTransfers.has(transfer.key))continue;seenTransfers.add(transfer.key);if(account.id===0)transfersIn+=transfer.amountCents;else if(account.id===transfer.bankId)transfersOut+=transfer.amountCents;}if(account.id===0)for(const expense of state.personalTreasuryFlows?.personalCashExpenses||[]){if(expense.date<start||seenPersonal.has(expense.key))continue;seenPersonal.add(expense.key);personalOut+=expense.amountCents;}
+ return {...account,opening,receipts,outgoing,transfersIn,transfersOut,personalOut,balance:(opening?.amountCents||0)+receipts+transfersIn-outgoing-transfersOut-personalOut};
  });
  }
  root.clientStatement=clientStatement;root.tradeBills=tradeBills;root.billBalances=billBalances;root.tradeSummary=tradeSummary;root.validateAllocation=validateAllocation;root.treasuryBalances=treasuryBalances;
