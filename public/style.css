@@ -68,3 +68,5 @@ aside{overflow-y:auto}aside nav{display:block;margin:24px -22px}aside nav button
 .jumia-client-table{overflow-x:auto;margin-top:16px}.jumia-client-table table{border:1px solid #c9d5df}.jumia-client-table th,.jumia-client-table td{border:1px solid #c9d5df;vertical-align:middle}.jumia-client-table th{background:#f4f7fa}
 
 .jumia-listings-table{overflow-x:auto;margin-top:16px}.jumia-listings-table table{border:1px solid #aabac8}.jumia-listings-table th,.jumia-listings-table td{border:1px solid #aabac8;vertical-align:middle}.jumia-listings-table th{background:#f4f7fa}
+
+.jumia-listing-filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:end}.jumia-listing-filters label{min-width:0}.jumia-listing-filters input,.jumia-listing-filters select{width:100%;min-width:0}@media(max-width:1000px){.jumia-listing-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:550px){.jumia-listing-filters{grid-template-columns:1fr}}
