@@ -70,3 +70,6 @@ aside{overflow-y:auto}aside nav{display:block;margin:24px -22px}aside nav button
 .jumia-listings-table{overflow-x:auto;margin-top:16px}.jumia-listings-table table{border:1px solid #aabac8}.jumia-listings-table th,.jumia-listings-table td{border:1px solid #aabac8;vertical-align:middle}.jumia-listings-table th{background:#f4f7fa}
 
 .jumia-listing-filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:end}.jumia-listing-filters label{min-width:0}.jumia-listing-filters input,.jumia-listing-filters select{width:100%;min-width:0}@media(max-width:1000px){.jumia-listing-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:550px){.jumia-listing-filters{grid-template-columns:1fr}}
+
+.bank-import-table{overflow:auto;max-height:55vh;margin:16px 0}.bank-import-table thead th{position:sticky;top:0;z-index:1}#bank-statement-error,#bank-detail-error{color:#b32626}#bank-statement-preview{margin-top:18px}#bank-statement-preview:empty{display:none}
+.personal-split-fields{display:flex;gap:16px;flex-wrap:wrap}.personal-split-fields>label{flex:1;min-width:160px}#personal-expense-fields{width:100%;border:1px solid #d5e0e9;border-radius:10px;padding:16px}#personal-expense-fields[hidden],#personal-withdrawal-note[hidden]{display:none}#personal-finance-form-error{color:#b32626}
