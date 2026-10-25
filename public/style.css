@@ -81,3 +81,5 @@ aside{overflow-y:auto}aside nav{display:block;margin:24px -22px}aside nav button
 .finance-category-list{flex-basis:100%;max-width:700px}.finance-category-list textarea{width:100%}#finance-categories-form [data-finance-category-message]{flex-basis:100%}.bank-nature-fields select[data-bank-nature-category]{max-width:280px;width:100%}
 
 #personal-loan-form [data-loan-bank-fields]{flex-basis:100%;display:flex;gap:14px;flex-wrap:wrap}#personal-loan-form [data-loan-bank-fields][hidden]{display:none}#personal-loan-form [data-loan-bank-fields] small,#personal-loan-form [data-personal-loan-error]{flex-basis:100%}
+
+#personal-loan-form [data-loan-pending-note][hidden]{display:none}#personal-loan-form [data-loan-pending-note]{flex-basis:100%;color:#8a5600}
