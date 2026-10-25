@@ -131,9 +131,10 @@ const jumiaConnection=createJumiaConnection({db,key:connectionKey(databasePath+'
 const jumiaApiCatalog=createJumiaCatalog({db,list,save,connection:jumiaConnection,users:()=>db.prepare('SELECT id,role,active,access_profile,jumia_store_ids FROM users').all()});
 const jumiaProductStatusTest=createProductStatusTest({db,list,catalog:jumiaApiCatalog,connection:jumiaConnection});
 const beautyMarketImport=createBeautyMarketImport({db,list,save,catalog:jumiaApiCatalog,connection:jumiaConnection});
-const bankImport=createBankImportService({db,list});
+let personalLoans;
+const bankImport=createBankImportService({db,list,onPersonalLoan:(user,body)=>personalLoans.handle(user,body,false)});
 const personalFinance=bankImport.personalFinance;
-const personalLoans=createPersonalLoans({db,list,bankImport});
+personalLoans=createPersonalLoans({db,list,bankImport});
 const jumiaOrderEmails=createJumiaOrderEmail({db,list,catalog:jumiaApiCatalog,mailer:createSupplierAlertMailer()});
 setInterval(()=>jumiaOrderEmails.flush().catch(()=>{}),60000).unref();
 const jumiaOrderSync=createOrderSync({db,list,save,catalog:jumiaApiCatalog,connection:jumiaConnection,onCreated:jumiaOrderEmails.created});
