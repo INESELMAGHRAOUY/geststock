@@ -132,7 +132,7 @@ const jumiaApiCatalog=createJumiaCatalog({db,list,save,connection:jumiaConnectio
 const jumiaProductStatusTest=createProductStatusTest({db,list,catalog:jumiaApiCatalog,connection:jumiaConnection});
 const beautyMarketImport=createBeautyMarketImport({db,list,save,catalog:jumiaApiCatalog,connection:jumiaConnection});
 let personalLoans;
-const bankImport=createBankImportService({db,list,onPersonalLoan:(user,body)=>personalLoans.handle(user,body,false)});
+const bankImport=createBankImportService({db,list,onPersonalLoan:(user,body)=>personalLoans.handle(user,body,false),onPersonalLoanChoices:user=>personalLoans.read(user)});
 const personalFinance=bankImport.personalFinance;
 personalLoans=createPersonalLoans({db,list,bankImport});
 const jumiaOrderEmails=createJumiaOrderEmail({db,list,catalog:jumiaApiCatalog,mailer:createSupplierAlertMailer()});
