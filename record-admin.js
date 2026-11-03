@@ -49,7 +49,7 @@ function handleRecordAdmin({db,body,user,list,save}){
  }
  const stockEffects=record=>{
  if(record.active===false)return [];
- if(kind==='documents'&&record.type==='Facture')return record.lines.map(l=>[l.productId,-l.qty]);
+ if(kind==='documents'&&['Facture','Retour'].includes(record.type))return record.lines.map(l=>[l.productId,(record.type==='Retour'?1:-1)*l.qty]);
  if(kind==='movements'&&record.status!=='pending')return (record.lines||[record]).map(l=>[l.productId,l.qty]);
  if(kind==='inventories')return [[record.productId,record.delta]];
  return [];
