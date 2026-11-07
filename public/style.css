@@ -88,3 +88,6 @@ aside{overflow-y:auto}aside nav{display:block;margin:24px -22px}aside nav button
 .client-operation-controls>fieldset[hidden]{display:none!important}
 .client-operation-controls label{min-width:0;width:100%}
 .client-operation-controls [data-client-operation-help]{grid-column:1/-1;margin:0;font-size:.9rem;color:var(--muted,#60758b)}
+.supplier-group-line{padding:8px 0;min-height:62px}
+.supplier-group-line+.supplier-group-line{border-top:1px solid #e7edf3}
+.supplier-group-line small{color:var(--muted,#60758b)}
