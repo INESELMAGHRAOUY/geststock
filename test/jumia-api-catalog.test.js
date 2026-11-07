@@ -32,3 +32,14 @@ test('delegate binds its assigned store using the version from its real sanitize
  f.save('jumiaStores',{...raw,name:'Store changed'},raw.id);await assert.rejects(f.api.bind(f.delegate,{storeId:visible.id,shopId,country:'jumia-ma',expectedVersion:visible.version}),/a changé/);
  }finally{f.db.close();}
 });
+test('delegate catalog retries an empty ACTIVE result without provider filter and still imports only Morocco ACTIVE SKUs',async()=>{
+ const f=fixture();try{await f.bind(f.delegate,f.delegateStore);const calls=[];f.connection.catalog=async(u,shop,country,options)=>{assert.equal(u.id,f.delegate.id);assert.equal(shop,shopId);calls.push(options.statusFilter||'ACTIVE');if(options.statusFilter!=='all')return [];const rows=remote();rows[0].variations[1].businessClients[0].status='INACTIVE';return rows;};
+ const p=await f.api.preview(f.delegate,{storeId:f.delegateStore});assert.deepEqual(calls,['ACTIVE','all']);assert.deepEqual(p.rows.map(r=>r.sku),['SKU']);assert.equal(p.diagnostics.unfiltered,true);assert.equal(p.diagnostics.inactive,1);assert.equal(f.list('jumiaStores').find(s=>s.id===f.delegateStore).listings.length,0);
+ f.api.commit(f.delegate,{storeId:f.delegateStore,previewId:p.previewId,skus:['SKU']});assert.equal(f.list('jumiaStores').find(s=>s.id===f.delegateStore).listings.length,1);
+ }finally{f.db.close();}
+});
+test('empty and inactive catalogs return diagnostics, while partial reads never trigger another provider scan',async()=>{
+ const f=fixture();try{await f.bind(f.admin,f.storeId);let calls=0;f.connection.catalog=async()=>{calls++;return [];};const p=await f.api.preview(f.admin,{storeId:f.storeId});assert.equal(calls,2);assert.equal(p.rows.length,0);assert.equal(p.diagnostics.products,0);assert.equal(p.diagnostics.shopName,'Jumia shop');
+ const inactive=remote();for(const v of inactive[0].variations)v.businessClients[0].status='INACTIVE';const partial=await f.api.preview(f.admin,{storeId:f.storeId},{cachedProducts:inactive,partial:true});assert.equal(calls,2);assert.equal(partial.diagnostics.inactive,2);
+ }finally{f.db.close();}
+});
