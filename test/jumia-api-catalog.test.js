@@ -57,3 +57,7 @@ test('one-click catalog skips conflicting PRODUCT_SIDs and cancellation saves no
  await assert.rejects(Promise.resolve().then(()=>f.api.importAll(f.delegate,{storeId:f.storeId})),/non autorisée/);
  }finally{f.db.close();}
 });
+test('rate-limited direct import keeps its checkpoint, blocks early retries and resumes without downloading previous pages again',async()=>{
+ const f=fixture();try{await f.bind(f.admin,f.storeId);let calls=0;f.connection.catalog=async(u,s,c,o)=>{calls++;if(calls===1){o.onCheckpoint({shopId,country:'jumia-ma',statusFilter:'all',products:remote(),nextToken:'next',pages:1,seen:['next'],complete:false});const e=Error('Limite test');e.retryAt=1001000;throw e;}assert.equal(o.resume.nextToken,'next');assert.equal(o.resume.pages,1);assert.equal(o.resume.statusFilter,'all');return remote();};const first=f.api.importAll(f.admin,{storeId:f.storeId}),failed=await finishCatalogJob(f,f.admin,{...first,storeId:f.storeId});assert.equal(failed.status,'error');assert.equal(failed.resumable,true);assert.equal(failed.retryAt,1001000);assert.throws(()=>f.api.importAll(f.admin,{storeId:f.storeId}),/attendez/);assert.equal(calls,1);f.advance();const next=f.api.importAll(f.admin,{storeId:f.storeId}),done=await finishCatalogJob(f,f.admin,{...next,storeId:f.storeId});assert.equal(done.status,'ready',done.error);assert.equal(calls,2);assert.equal(done.result.count,2);assert.equal(f.list('jumiaStores')[0].listings.length,2);
+ }finally{f.db.close();}
+});
