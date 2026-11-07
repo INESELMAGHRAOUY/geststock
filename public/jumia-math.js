@@ -4,10 +4,10 @@
  function isOutOfStockCancellation(line){return line.status==='Annulé'&&/out[\s_-]*of[\s_-]*stock/i.test(line.cancelReason||'');}
  function cancellationOnClient(order,line){return line.status==='Annulé'&&(typeof order.cancellationOnClient==='boolean'?order.cancellationOnClient:!isOutOfStockCancellation(line));}
  function matchesJumiaStatus(order,status){return !status||order.lines.some(l=>status==='Out of stock'?isOutOfStockCancellation(l):status==='Annulé'?l.status==='Annulé'&&!isOutOfStockCancellation(l):l.status===status);}
- function jumiaStockLines(order){if(order.active===false)return [];return order.lines.filter(l=>l.productId&&l.fromStock&&l.dispatched&&!l.returnedToStock&&!(l.status==='La livraison a échoué'&&!l.lost)).map(l=>[l.productId,-l.qty]);}
+ function jumiaStockLines(order){if(order.active===false)return [];return order.lines.filter(l=>l.productId&&l.fromStock&&l.dispatched&&!l.returnedToStock&&!(l.status==='La livraison a échoué'&&!l.lost)).map(l=>[l.productId,-l.qty*(l.unitsPerPack??1)]);}
  function jumiaOrderTotals(order){
  let revenue=0,productCost=0,marketplaceFees=0,forecast=0,returnCompensation=0;
- for(const l of order.lines){if(l.status==='Annulé'&&!l.dispatched)continue;const gross=cents(l.salePrice)*l.qty,buy=cents(l.purchasePrice)*l.qty,fees=l.commissionActual!==null&&l.commissionActual!==undefined?cents(l.commissionActual):(l.status==='Livré'?Math.round(gross*l.commissionPercent/100):0);
+ for(const l of order.lines){if(l.status==='Annulé'&&!l.dispatched)continue;const gross=cents(l.salePrice)*l.qty,buy=cents(l.purchasePrice)*l.qty*(l.unitsPerPack??1),fees=l.commissionActual!==null&&l.commissionActual!==undefined?cents(l.commissionActual):(l.status==='Livré'?Math.round(gross*l.commissionPercent/100):0);
  if(l.status==='Retourné')returnCompensation+=cents(l.returnCompensation);
  if(l.status==='Livré'){revenue+=gross;productCost+=buy;}else if(l.lost)productCost+=buy;
  marketplaceFees+=fees+cents(l.shippingContribution)*l.qty+cents(l.otherFees)-cents(l.refundCredit);
