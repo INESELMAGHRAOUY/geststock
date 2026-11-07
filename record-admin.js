@@ -41,7 +41,7 @@ function handleRecordAdmin({db,body,user,list,save}){
  if(kind==='movements')assertUniquePurchaseReference(list('movements'),updated,old.id);
  if(['movements','documents'].includes(kind)){
  const side=kind==='movements'?'supplier':'client';const allocations=list('settlements').filter(p=>p.side===side&&p.active!==false).flatMap(p=>p.allocations).filter(a=>a.billId===old.id);
- if(allocations.length){if(updated.active===false)throw Error('Désactivez les règlements liés avant de désactiver ce bon');if(allocations.reduce((n,a)=>n+a.amountCents,0)>Math.round((updated.total||0)*100))throw Error('Le total ne peut pas être inférieur aux règlements liés');const key=side==='supplier'?'supplierId':'clientId';if((old[key]||0)!==(updated[key]||0))throw Error('Désactivez les règlements liés avant de changer le tiers');}
+ if(allocations.length){if(updated.active===false)throw Error('Désactivez les règlements liés avant de désactiver ce bon');if(Math.abs(allocations.reduce((n,a)=>n+a.amountCents,0))>Math.round((updated.total||0)*100))throw Error('Le total ne peut pas être inférieur aux règlements liés');const key=side==='supplier'?'supplierId':'clientId';if((old[key]||0)!==(updated[key]||0))throw Error('Désactivez les règlements liés avant de changer le tiers');}
  }
  if(kind==='expensePayments'&&updated.active!==false){
  const expense=list('expenses').find(x=>x.id===updated.expenseId);if(!expense||expense.active===false)throw Error('Réactivez la charge avant son paiement');

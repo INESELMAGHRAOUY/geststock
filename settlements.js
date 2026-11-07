@@ -13,7 +13,7 @@ function handleSettlement({db,list,save,user,body}){
  if(!old||old.active===false||old.method!=='Chèque'||old.status!=='pending'||!validDate(body.clearedDate)||body.clearedDate>new Date().toISOString().slice(0,10))throw Error('Validation ou date d’encaissement invalide');
  validateAllocation(state(),old.side,old.allocations,old.id,old.partyId);updated={...old,status:'validated',clearedDate:body.clearedDate};
  }else{
- if(old&&old.active===false)throw Error('Réactivez ce règlement avant modification');
+ if(old&&old.active===false)throw Error('Réactivez ce règlement avant modification');if(old?.direction==='out')throw Error('Pour corriger un remboursement client, désactivez-le puis corrigez le retour concerné');
  if(!['supplier','client'].includes(body.side)||!Number.isSafeInteger(body.partyId)||!validDate(body.date)||!['Espèces','Virement','App banque','Chèque','Carte','Autre'].includes(body.method))throw Error('Informations de règlement invalides');
  const amountCents=Math.round(body.amount*100);if(!Number.isFinite(body.amount)||amountCents<=0||!Number.isSafeInteger(amountCents)||Math.abs(body.amount*100-amountCents)>0.00001)throw Error('Montant invalide');
  const balances=billBalances(state(),body.side,old?.id);if(!Array.isArray(body.billIds)||!body.billIds.length||new Set(body.billIds).size!==body.billIds.length)throw Error('Sélectionnez des bons distincts');
