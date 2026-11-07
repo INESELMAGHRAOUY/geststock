@@ -145,7 +145,7 @@ setInterval(()=>jumiaOrderCheck.daily(dailyOrderUsers(),undefined,{auto:true}).c
 setTimeout(()=>jumiaOrderCheck.daily(dailyOrderUsers(),undefined,{auto:true}).catch(()=>{}),10000).unref();
 const supplierEmails=createSupplierStockEmail({db,list,mailer:createSupplierAlertMailer()});
 const supplierStock=createSupplierStock({db,list,onResult:result=>supplierEmails.observe(result)});
-const delegateSupplierStock=createSupplierStock({db,namespace:'delegate_',list:kind=>kind==='products'?list('delegateProducts'):list(kind)});
+const delegateSupplierStock=createSupplierStock({db,namespace:'delegate_',list:kind=>kind==='products'?list('delegateProducts').map(p=>p.supplierUrl||p.parabudgetUrl||p.universparaUrl?{...p,productType:'PARA'}:p):list(kind)});
 setInterval(()=>delegateSupplierStock.daily({maxAgeMs:2*60*60*1000}).catch(()=>{}),60*60*1000).unref();setTimeout(()=>delegateSupplierStock.daily({maxAgeMs:2*60*60*1000}).catch(()=>{}),3000).unref();
 const jumiaPriceControl=createPriceControl({db,list,catalog:jumiaApiCatalog,connection:jumiaConnection,suppliers:supplierStock,preferences:jumiaOrderEmails.preferences,mailer:createSupplierAlertMailer()});
 setInterval(()=>jumiaPriceControl.daily().catch(()=>{}),3600000).unref();
