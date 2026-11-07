@@ -38,3 +38,9 @@ test('historical single-unit orders remain unchanged when a listing becomes a pa
  f.run('jumiaOrders',{...o,expectedRecord:JSON.stringify(f.order(id)),reason:'Legacy refresh'});assert.equal(f.order(id).lines[0].unitsPerPack,1);assert.equal(f.list('products')[0].stock,6);
  assert.equal(jumiaOrderTotals(f.order(id)).productCost,4000);
 });
+test('Jumia listing title survives product linking and later listing edits',t=>{
+ const f=fixture(t);let s=f.store();const title='Jumia shampoo pack de 2 — titre original';
+ f.run('jumiaStores',{...s,expectedRecord:JSON.stringify(s),reason:'Jumia title',listings:s.listings.map(l=>({...l,name:title}))});s=f.store();assert.equal(s.listings[0].name,title);
+ const listings=s.listings.map(l=>{const copy={...l,shippingFee:9};delete copy.name;return copy;});
+ f.run('jumiaStores',{...s,expectedRecord:JSON.stringify(s),reason:'Shipping only',listings});assert.equal(f.store().listings[0].name,title);assert.equal(f.list('products')[0].name,'Shampoo');
+});
