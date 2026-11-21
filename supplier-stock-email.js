@@ -4,7 +4,7 @@ const {normalizeEmail}=require('./account-access');
 const {productType}=require('./public/product-type');
 const {principalJumiaState}=require('./principal-jumia-state');
 const {assignedStores,isJumiaDelegate}=require('./jumia-delegate');
-const sources={beautymarket:['supplierUrl','BeautyMarket'],parabudget:['parabudgetUrl','CPO'],universpara:['universparaUrl','UniversPara']};
+const sources={beautymarket:['supplierUrl','BeautyMarket'],parabudget:['parabudgetUrl','CPO'],universpara:['universparaUrl','UniversPara'],beautymall:['beautymallUrl','BeautyMall']};
 const {priceProfitability}=require('./public/price-alerts');
 const {delegateCost}=require('./delegate-stock');
 const emailEscape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

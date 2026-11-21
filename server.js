@@ -151,7 +151,7 @@ const telegramImport=createTelegramImport({db,list,save});
 const telegramConnection=createTelegramConnection({db,key:connectionKey(databasePath+'.telegram-key'),onReset:id=>telegramPrivateImport.clearUser(id)});
 const telegramPrivateImport=createTelegramPrivateImport({db,list,save,connection:telegramConnection});
 const supplierStock=createSupplierStock({db,list,onResult:result=>supplierEmails.observe(result)});
-const delegateSupplierStock=createSupplierStock({db,namespace:'delegate_',list:kind=>kind==='products'?list('delegateProducts').map(p=>p.supplierUrl||p.parabudgetUrl||p.universparaUrl?{...p,productType:'PARA'}:p):list(kind)});
+const delegateSupplierStock=createSupplierStock({db,namespace:'delegate_',list:kind=>kind==='products'?list('delegateProducts').map(p=>p.supplierUrl||p.parabudgetUrl||p.universparaUrl||p.beautymallUrl?{...p,productType:'PARA'}:p):list(kind)});
 setInterval(()=>delegateSupplierStock.daily({maxAgeMs:2*60*60*1000}).catch(()=>{}),60*60*1000).unref();setTimeout(()=>delegateSupplierStock.daily({maxAgeMs:2*60*60*1000}).catch(()=>{}),3000).unref();
 const jumiaPriceControl=createPriceControl({db,list,catalog:jumiaApiCatalog,connection:jumiaConnection,suppliers:supplierStock,preferences:jumiaOrderEmails.preferences,mailer:createSupplierAlertMailer()});
 setInterval(()=>jumiaPriceControl.daily().catch(()=>{}),3600000).unref();
@@ -454,6 +454,7 @@ const server=http.createServer(async(req,res)=>{
  if(body.supplierUrl!==undefined)body.supplierUrl=supplierUrl(body.supplierUrl);
  if(body.parabudgetUrl!==undefined)body.parabudgetUrl=supplierUrl(body.parabudgetUrl,'parabudget');
  if(body.universparaUrl!==undefined)body.universparaUrl=supplierUrl(body.universparaUrl,'universpara');
+ if(body.beautymallUrl!==undefined)body.beautymallUrl=supplierUrl(body.beautymallUrl,'beautymall');
  if(body.imageUrl){let url;try{url=new URL(body.imageUrl);}catch{throw Error('URL image invalide');}if(url.protocol!=='https:'||url.hostname!=='vendorcenter.jumia.com')throw Error('URL image Jumia invalide');}
  delete body.imageId;delete body.imageName;
  if(body.image)productImage=readProductImage(body.image);delete body.image;

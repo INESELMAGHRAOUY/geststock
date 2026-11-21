@@ -1,7 +1,7 @@
 const crypto=require('node:crypto');
 const {productType}=require('./public/product-type');
 const {normalizeEmail}=require('./account-access');
-const SOURCES={beautymarket:['supplierUrl','BeautyMarket'],parabudget:['parabudgetUrl','CPO'],universpara:['universparaUrl','UniversPara']};
+const SOURCES={beautymarket:['supplierUrl','BeautyMarket'],parabudget:['parabudgetUrl','CPO'],universpara:['universparaUrl','UniversPara'],beautymall:['beautymallUrl','BeautyMall']};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function formatRuptureEmail({product,store,listing,source,checkedAt}){const rows=[['Produit',product.name],['SKU vendeur',listing.sku],['Boutique Jumia',store.name],['Fournisseur',SOURCES[source][1]],['Disponibilité fournisseur','En rupture'],['Statut Jumia confirmé','ACTIVE'],['Vérification',checkedAt]],note='Vérifiez votre stock et vos autres fournisseurs avant de désactiver ce listing. GestStock ne modifie pas votre boutique Jumia.';return {subject:'GestStock — Produit en rupture encore ACTIVE sur Jumia',text:rows.map(r=>r.join(' : ')).join('\n')+'\n\n'+note,html:'<!doctype html><html lang="fr"><body style="font-family:Arial,sans-serif"><h2>Produit en rupture encore ACTIVE sur Jumia</h2><table cellpadding="8" cellspacing="0" border="1">'+rows.map(r=>'<tr><th>'+esc(r[0])+'</th><td>'+esc(r[1])+'</td></tr>').join('')+'</table><p>'+esc(note)+'</p></body></html>'};}
 function createJumiaRuptureEmail({db,list,catalog,connection,suppliers,preferences,mailer,clock=Date.now}){

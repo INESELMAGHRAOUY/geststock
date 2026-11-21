@@ -1,5 +1,5 @@
 const crypto=require('node:crypto'),{productType}=require('./public/product-type'),{createProductStatusTest}=require('./jumia-product-status-test');
-const SOURCES={beautymarket:['supplierUrl','BeautyMarket'],parabudget:['parabudgetUrl','CPO'],universpara:['universparaUrl','UniversPara']};
+const SOURCES={beautymarket:['supplierUrl','BeautyMarket'],parabudget:['parabudgetUrl','CPO'],universpara:['universparaUrl','UniversPara'],beautymall:['beautymallUrl','BeautyMall']};
 function createRuptureActions({db,list,catalog,connection,suppliers,clock=Date.now}){
  db.exec('CREATE TABLE IF NOT EXISTS jumia_rupture_previews(id TEXT PRIMARY KEY,user_id INTEGER NOT NULL,expires_at INTEGER NOT NULL,data TEXT NOT NULL)');const scans=new Set();
  for(const r of db.prepare('SELECT id,data FROM jumia_rupture_previews').all()){const d=JSON.parse(r.data);if(d.running){d.running=false;d.error='Lecture interrompue par le redémarrage. Actualisez la liste.';db.prepare('UPDATE jumia_rupture_previews SET data=? WHERE id=?').run(JSON.stringify(d),r.id);}}

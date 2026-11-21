@@ -1,7 +1,7 @@
 (function(root){
  function supplierPriceOptions(product,checks,now=Date.now()){
   if(!product||product.productType&&product.productType!=='PARA')return [];
-  return [['beautymarket','supplierUrl','BeautyMarket'],['parabudget','parabudgetUrl','CPO'],['universpara','universparaUrl','UniversPara']].flatMap(([source,field,label])=>{if(!product[field])return [];const r=checks.find(r=>r.productId===product.id&&(r.source||'beautymarket')===source&&r.url===product[field]);const age=now-Date.parse(r?.checkedAt);return r?.status==='available'&&r.priceCurrency==='MAD'&&Number.isSafeInteger(r.priceCents)&&r.priceCents>0&&age>=0&&age<86400000?[{source,label,priceCents:r.priceCents}]:[];}).sort((a,b)=>a.priceCents-b.priceCents);
+  return [['beautymarket','supplierUrl','BeautyMarket'],['parabudget','parabudgetUrl','CPO'],['universpara','universparaUrl','UniversPara'],['beautymall','beautymallUrl','BeautyMall']].flatMap(([source,field,label])=>{if(!product[field])return [];const r=checks.find(r=>r.productId===product.id&&(r.source||'beautymarket')===source&&r.url===product[field]);const age=now-Date.parse(r?.checkedAt);return r?.status==='available'&&r.priceCurrency==='MAD'&&Number.isSafeInteger(r.priceCents)&&r.priceCents>0&&age>=0&&age<86400000?[{source,label,priceCents:r.priceCents}]:[];}).sort((a,b)=>a.priceCents-b.priceCents);
  }
  function priceProfitability({salePrice,costCents,commissionPercent,shipping=6,transport=20,packaging=5,other=0,minimumProfit=0}){
   if(costCents===null||costCents===undefined)return {known:false,reason:'Prix d’achat à renseigner ou prix fournisseur frais indisponible.'};
