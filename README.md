@@ -268,3 +268,9 @@ Dans **Articles → Liste des articles**, le bouton **Créer sur Jumia** ouvre u
 La création réutilise le suivi des feeds : un envoi incertain n’est pas renvoyé automatiquement, un article déjà lié à la boutique est refusé, et le statut doit être vérifié pour récupérer le SID Jumia. Les articles PROF sont exclus. Une modification de l’article ou de la boutique après la prévisualisation impose de recommencer.
 
 Une image locale sélectionnée est exposée à Jumia par un lien aléatoire valable sept jours, limité à cette image. Le point d’accès ne permet pas d’énumérer les images et ne fonctionne plus après expiration, suppression ou changement d’image du produit. L’origine HTTPS est `https://inom.inombeauty.com` par défaut ; définir `JUMIA_PUBLIC_ORIGIN` pour une autre installation publique. La création reste réservée aux administrateurs et aux boutiques API qui leur sont accessibles.
+
+### Catégories Jumia déjà importées
+
+La création utilise directement les catégories GestStock importées avec leur code Jumia. Elles sont proposées immédiatement par autocomplete ; aucun second lien manuel n’est requis. Au choix d’une catégorie, le jeu d’attributs officiel est résolu pour ce code si nécessaire, puis mémorisé pour les prochaines créations. Cette mémorisation conserve le code, le nom et l’identité du référentiel existant. Une catégorie sans code, absente du catalogue de création ou non finale ne peut pas être envoyée en devinant ses caractéristiques.
+
+Le panneau **Corriger un code de catégorie (facultatif)** reste disponible pour les exceptions. La lecture paginée accepte les métadonnées et codes numériques sérialisés en chaînes, avec validation des bornes ; une réponse incompatible fournit un diagnostic `CAT183` sans exposer les jetons. Schéma de référence : [Retrieve Categories — documentation officielle Jumia](https://vendorcenter.jumia.com/api-docs/paths/catalog/catalog@categories.yaml).
