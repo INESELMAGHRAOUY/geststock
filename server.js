@@ -462,6 +462,7 @@ const server=http.createServer(async(req,res)=>{
  if(body.image)productImage=readProductImage(body.image);delete body.image;
 
  for(const key of ['barcode','sku'])if(body[key]!==undefined&&(typeof body[key]!=='string'||body[key].length>150))throw Error('Code-barres ou SKU vendeur invalide');
+ Object.assign(body,require('./product-details').productDetails(body));
  if(body.jumiaCommissionPercent!==undefined&&(!Number.isFinite(body.jumiaCommissionPercent)||body.jumiaCommissionPercent<0||body.jumiaCommissionPercent>100))throw Error('Commission Jumia invalide');
  if(body.purchasePrice!==undefined&&(!Number.isFinite(body.purchasePrice)||body.purchasePrice<0))throw Error('Prix d’achat invalide');
  if(typeof body.name!=='string'||!body.name.trim()||![body.price,body.min].every(x=>Number.isFinite(x)&&x>=0)||!Number.isFinite(body.stock)||(body.id===undefined&&body.stock<0))throw Error('Produit invalide');
